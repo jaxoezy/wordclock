@@ -426,7 +426,7 @@ void clock_display() {
   // Single minutes
   single_min = minutes % 5;
   if (single_min > 0 && en_single_min) {
-    send_time_2_LED(single_mins[single_min - 1], brightness);
+    send_time_2_LED(single_mins[single_min - 1]);
   }
 
   // Five minutes
@@ -442,76 +442,76 @@ void clock_display() {
 
   // Display time
   if (en_es_ist) {
-    send_time_2_LED(es_ist, brightness);
+    send_time_2_LED(es_ist);
   }
 
   switch (five_min) {
     case 0:
-      send_time_2_LED(full_hours_disp[hours], brightness);
-      if (en_uhr) send_time_2_LED(uhr, brightness);
+      send_time_2_LED(full_hours_disp[hours]);
+      if (en_uhr) send_time_2_LED(uhr);
       break;
     case 5:
-      send_time_2_LED(fuenf_min, brightness);
-      send_time_2_LED(nach, brightness);
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(fuenf_min);
+      send_time_2_LED(nach);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 10:
-      send_time_2_LED(zehn_min, brightness);
-      send_time_2_LED(nach, brightness);
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(zehn_min);
+      send_time_2_LED(nach);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 15:
-      send_time_2_LED(viertel_min, brightness);
-      send_time_2_LED(nach, brightness);
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(viertel_min);
+      send_time_2_LED(nach);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 20:
-      send_time_2_LED(zwanzig_min, brightness);
-      send_time_2_LED(nach, brightness);
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(zwanzig_min);
+      send_time_2_LED(nach);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 25:
-      send_time_2_LED(fuenf_min, brightness);
-      send_time_2_LED(vor, brightness);
-      send_time_2_LED(halb, brightness);
+      send_time_2_LED(fuenf_min);
+      send_time_2_LED(vor);
+      send_time_2_LED(halb);
       hours++;
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 30:
-      send_time_2_LED(halb, brightness);
+      send_time_2_LED(halb);
       hours++;
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 35:
-      send_time_2_LED(fuenf_min, brightness);
-      send_time_2_LED(nach, brightness);
-      send_time_2_LED(halb, brightness);
+      send_time_2_LED(fuenf_min);
+      send_time_2_LED(nach);
+      send_time_2_LED(halb);
       hours++;
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 40:
-      send_time_2_LED(zwanzig_min, brightness);
-      send_time_2_LED(vor, brightness);
+      send_time_2_LED(zwanzig_min);
+      send_time_2_LED(vor);
       hours++;
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 45:
-      send_time_2_LED(viertel_min, brightness);
-      send_time_2_LED(vor, brightness);
+      send_time_2_LED(viertel_min);
+      send_time_2_LED(vor);
       hours++;
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 50:
-      send_time_2_LED(zehn_min, brightness);
-      send_time_2_LED(vor, brightness);
+      send_time_2_LED(zehn_min);
+      send_time_2_LED(vor);
       hours++;
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(hours_disp[hours]);
       break;
     case 55:
-      send_time_2_LED(fuenf_min, brightness);
-      send_time_2_LED(vor, brightness);
+      send_time_2_LED(fuenf_min);
+      send_time_2_LED(vor);
       hours++;
-      send_time_2_LED(hours_disp[hours], brightness);
+      send_time_2_LED(hours_disp[hours]);
       break;
   }
 
@@ -523,7 +523,7 @@ void clock_display() {
 ////////////////////////////////////////////////////
 // Todo: Set Color & brightness
 // Use only one display function with variable array sizes if possible
-void send_time_2_LED(byte x[], int brightness) {
+void send_time_2_LED(byte x[]) {
   for (byte i = 0; i <= 6; i++) {
     if (x[i] != 0) {
       pixels.setPixelColor(x[i] - 1, pixels.Color(brightness, brightness, brightness));
@@ -535,7 +535,7 @@ void send_time_2_LED(byte x[], int brightness) {
 // Display numbers
 ////////////////////////////////////////////////////
 // Todo: Set Color & brightness
-void send_num_2_LED(byte x[], int brightness) {
+void send_num_2_LED(byte x[]) {
   for (byte i = 0; i <= 16; i++) {
     if (x[i] != 0) {
       pixels.setPixelColor(x[i] - 1, pixels.Color(brightness, brightness, brightness));
@@ -776,8 +776,8 @@ void show_day() {
   
   byte day_left = (day() - day() % 10)/10;
   byte day_right = day() % 10;
-  send_num_2_LED(numbers_left[day_left], brightness);
-  send_num_2_LED(numbers_right[day_right], brightness);
+  send_num_2_LED(numbers_left[day_left]);
+  send_num_2_LED(numbers_right[day_right]);
 
   pixels.show(); // This sends the updated pixel color to the hardware.
   delay(2000);
@@ -839,8 +839,8 @@ void set_max_brightness() {
 //  for(byte i = 0; i <= 5; i++) {
 //    for(byte j = 0; j <= 9; j++) {
 //      disable_all_led();
-//      send_num_2_LED(numbers_left[j], brightness);
-//      send_num_2_LED(numbers_right[j], brightness);
+//      send_num_2_LED(numbers_left[j]);
+//      send_num_2_LED(numbers_right[j]);
 //      pixels.show(); // This sends the updated pixel color to the hardware.
 //      delay(5000);
 //    }
