@@ -7,3 +7,5 @@ Masterbranch includes
 - Weather data from Openweathermap/Wunderground
 
 Other branches include less features.
+
+Before running the code please get an API key from Openweathermap/Wunderground.
