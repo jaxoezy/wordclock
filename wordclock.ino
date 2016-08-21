@@ -1,20 +1,3 @@
-// Todo: Englisch/Deutsch
-// Temperatur aus Internet lesen und für bestimmte Zeit anzeigen
-// Standard-Farbe einstellen (RGB?)
-// WifiManager sollte hinzugefügt werden
-// IP von Webserver ist nicht konstant -> mit Felix besprechen
-// Nachgucken, wie deep sleep funktioniert
-// Uhr nachts zu einer bestimmten Zeit ausschalten und morgens wieder einschalten (ESP.deepSleep(10s*1000000))
-// -> Zeiten sollten manuell einstellbar sein
-// Wie genau ist Zeit bei deep sleep?
-// Sollte man den ESP auch für die einzelnen Minuten ausschalten, um maximal Strom zu sparen?
-// Er müsste sich jede Minute neu zu dem Netzwerk verbinden ... hmmm ...
-// Optional:
-// 1. Geo-Koordinaten bestimmen (https://askgeo.com)
-// 2. Zeitzone bestimmen (timezonedb.com)
-// 3. Wetter abfragen (http://openweathermap.org/)
-// LEDs: 10 hoch, 11 breit
-
 #include <Adafruit_NeoPixel.h>
 #include <TimeLib.h>
 #include <ESP8266WiFi.h>
@@ -33,7 +16,7 @@ const char pass[] = "";       // your network password
 // Weather forecast Openweathermap
 //const char weather_host[] = "api.openweathermap.org";
 //const char city_id[] = "3220838"; // Munich
-//const char API_key[] = "";
+//const char API_key[] = ""; // Openweathermap API key
 //const char units[] = "metric"; // °C
 //const char no_3h_forecast[] = "1"; // No. consecutive 3h forecast
 
@@ -41,7 +24,7 @@ const char pass[] = "";       // your network password
 const char weather_host[] = "api.wunderground.com";
 const char COUNTRY[] = "Germany";
 const char CITY[] = "Munich";
-const char APIKEY[] = ""; // Wunderground
+const char APIKEY[] = ""; // Wunderground API key
 
 // Set Pins
 #define PIN D1 // LED data pin
@@ -139,22 +122,6 @@ byte* numbers_right[10] = {right_0, right_1, right_2, right_3, right_4, right_5,
 byte LED_matrix[10][11];
 byte row_offset[10] = {62, 67, 94, 99, 126, 131, 158, 163, 190, 195};
 
-// Weather types:
-//   0: sunny
-//   1: partly clouded
-//   2: clouded
-//   3: rain
-//   4: heavy rain/thunderstorm
-
-// Associated colors
-//byte weather_color[5][3] = {
-//  {100, 100, 100},
-//  {100, 100, 100},
-//  {100, 100, 100},
-//  {100, 100, 100},
-//  {100, 100, 100}
-//};
-
 byte hours = 0;
 byte minutes = 0;
 byte five_min = 0;
@@ -185,16 +152,16 @@ void setup() {
   en_es_ist = EEPROM.read(4);
   en_uhr = EEPROM.read(5);
   en_single_min = EEPROM.read(6);
-  
+
   // Execute this code only once to initialize default brightness
-  //  EEPROM.write(0, 10); // Min brightness set by user
-  //  EEPROM.write(1, 0); // Correspondig LDR value
-  //  EEPROM.write(2, 50); // Max brightness set by user
-  //  EEPROM.write(3, 255); // Correspondig LDR value
-  //  EEPROM.write(4, 1); // "Es ist"
-  //  EEPROM.write(5, 1); // "Uhr"
-  //  EEPROM.write(6, 1); // Display singles minutes
-  //  EEPROM.commit();
+  //    EEPROM.write(0, 10); // Min brightness set by user
+  //    EEPROM.write(1, 0); // Correspondig LDR value
+  //    EEPROM.write(2, 50); // Max brightness set by user
+  //    EEPROM.write(3, 255); // Correspondig LDR value
+  //    EEPROM.write(4, 1); // "Es ist"
+  //    EEPROM.write(5, 1); // "Uhr"
+  //    EEPROM.write(6, 1); // Display singles minutes
+  //    EEPROM.commit();
 
   // Initialize maxtrix indices (cannot be done before setup)
   for (byte i = 0; i <= 9; i++) { // rows
@@ -406,7 +373,7 @@ void setup() {
   Serial.println("HTTP server started");
 
   getWeatherData();
-//  get_brightness();
+  //  get_brightness();
 
 }
 
@@ -769,12 +736,12 @@ void show_day() {
 void get_brightness() {
 
   // Read LDR
-  int sensorValue = analogRead(analogInPin)/4; // Value between 0 and 1023
+  int sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023
 
   int min_user_brightness = EEPROM.read(0);
   int max_user_brightness = EEPROM.read(2);
-  if(min_user_brightness > max_user_brightness) {
-      max_user_brightness = min_user_brightness;
+  if (min_user_brightness > max_user_brightness) {
+    max_user_brightness = min_user_brightness;
   }
   int min_sensor_value = EEPROM.read(1);
   int max_sensor_value = EEPROM.read(3);
@@ -795,7 +762,7 @@ void get_brightness() {
 void set_min_brightness() {
 
   // Read the analog in value
-  byte sensorValue = analogRead(analogInPin)/4; // Value between 0 and 1023/4
+  byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023/4
   EEPROM.write(0, brightness); // Min brightness set by user
   EEPROM.write(2, sensorValue); // Correspondig LDR value
   EEPROM.commit();
@@ -808,7 +775,7 @@ void set_min_brightness() {
 void set_max_brightness() {
 
   // Read the analog in value
-  byte sensorValue = analogRead(analogInPin)/4; // Value between 0 and 1023
+  byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023
   EEPROM.write(1, brightness); // Max brightness set by user
   EEPROM.write(3, sensorValue); // Correspondig LDR value
   EEPROM.commit();
@@ -995,7 +962,7 @@ void getWeatherData()
   client.stop(); //stop client
   //  result.replace('[', ' ');
   //  result.replace(']', ' ');
-//  Serial.println(result); // Computationally expensive
+  //  Serial.println(result); // Computationally expensive
 
   Serial.print("Result length: ");
   Serial.println(result.length() + 1);
@@ -1003,43 +970,43 @@ void getWeatherData()
   char jsonArray [result.length() + 1];
   result.toCharArray(jsonArray, sizeof(jsonArray));
   jsonArray[result.length() + 1] = '\0';
-//
-//  StaticJsonBuffer<4096> json_buf;
-//  JsonObject &root = json_buf.parseObject(jsonArray);
-//  if (!root.success())
-//  {
-//    Serial.println("parseObject() failed");
-//  }
-//
-//  byte mday_res = root["history"]["observations"][0]["date"]["mday"];
-//  byte mon_res = root["history"]["observations"][0]["date"]["mon"];
-//  int year_res = root["history"]["observations"][0]["date"]["year"];
-//  byte hour_res = root["history"]["observations"][0]["date"]["hour"];
-//  byte min_res = root["history"]["observations"][0]["date"]["min"];
-//  float temp_res = root["history"]["observations"][0]["tempm"];
+  //
+  //  StaticJsonBuffer<4096> json_buf;
+  //  JsonObject &root = json_buf.parseObject(jsonArray);
+  //  if (!root.success())
+  //  {
+  //    Serial.println("parseObject() failed");
+  //  }
+  //
+  //  byte mday_res = root["history"]["observations"][0]["date"]["mday"];
+  //  byte mon_res = root["history"]["observations"][0]["date"]["mon"];
+  //  int year_res = root["history"]["observations"][0]["date"]["year"];
+  //  byte hour_res = root["history"]["observations"][0]["date"]["hour"];
+  //  byte min_res = root["history"]["observations"][0]["date"]["min"];
+  //  float temp_res = root["history"]["observations"][0]["tempm"];
 
-//  Serial.println("Observation hour 0:");
-//  Serial.print(mday_res);
-//  Serial.print("-");
-//  Serial.print(mon_res);
-//  Serial.print("-");
-//  Serial.print(year_res);
-//  Serial.println("");
-//
-//  Serial.print(hour_res);
-//  Serial.print(":");
-//  Serial.print(min_res);
-//  Serial.println("");
-//
-//  Serial.print("Temperature: ");
-//  Serial.println(temp_res);
+  //  Serial.println("Observation hour 0:");
+  //  Serial.print(mday_res);
+  //  Serial.print("-");
+  //  Serial.print(mon_res);
+  //  Serial.print("-");
+  //  Serial.print(year_res);
+  //  Serial.println("");
+  //
+  //  Serial.print(hour_res);
+  //  Serial.print(":");
+  //  Serial.print(min_res);
+  //  Serial.println("");
+  //
+  //  Serial.print("Temperature: ");
+  //  Serial.println(temp_res);
 
   //  // Select 11*2h temperature forecast
   //  for (byte i = 0; i <= 10; i++) {
   //    temp_forecast[i] = root["hourly"]["data"][2 * i]["temperature"];
   //  }
 
-//  String timeZone = root["timezone"];
+  //  String timeZone = root["timezone"];
 
   //display_temp_forecast();
   //Serial.println("Weather:");
