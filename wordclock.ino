@@ -1,14 +1,8 @@
-// Openweathermap working
-
 // Todo: Englisch/Deutsch
-// Todo: Änderungen sollten gleich ersichtlich sein statt nach einer Minute
 // Temperatur aus Internet lesen und für bestimmte Zeit anzeigen
-// Helligkeit kalibrieren, d.h. für helle und dunkle Verhältnisse die Helligkeit einstellen
-// Einstellungen wie z.B. Helligkeit in EEPROM speichern
 // Standard-Farbe einstellen (RGB?)
 // Einstellungen in EEProm abspeichern
-// LDR anschließen und testen
-// Brightness ist global definiert, wird bei Funktionen aber übergeben
+// WifiManager sollte hinzugefügt werden
 // IP von Webserver ist nicht konstant -> mit Felix besprechen
 // Nachgucken, wie deep sleep funktioniert
 // Uhr nachts zu einer bestimmten Zeit ausschalten und morgens wieder einschalten (ESP.deepSleep(10s*1000000))
@@ -38,12 +32,18 @@
 const char ssid[] = "";  //  your network SSID (name)
 const char pass[] = "";       // your network password
 
-// Weather forecast
-const char weather_host[] = "api.openweathermap.org";
-const char city_id[] = "3220838"; // Munich
-const char API_key[] = "";
-const char units[] = "metric"; // °C
-const char no_3h_forecast[] = "1"; // No. consecutive 3h forecast
+// Weather forecast Openweathermap
+//const char weather_host[] = "api.openweathermap.org";
+//const char city_id[] = "3220838"; // Munich
+//const char API_key[] = "";
+//const char units[] = "metric"; // °C
+//const char no_3h_forecast[] = "1"; // No. consecutive 3h forecast
+
+// Weather forecast Wunderground
+const char weather_host[] = "api.wunderground.com";
+const char COUNTRY[] = "Germany";
+const char CITY[] = "Munich";
+const char APIKEY[] = ""; // Wunderground
 
 // Set Pins
 #define PIN D1 // LED data pin
@@ -379,8 +379,7 @@ void setup() {
   Serial.println("HTTP server started");
 
   getWeatherData();
-
-  //  get_brightness();
+//  get_brightness();
 
 }
 
@@ -685,55 +684,6 @@ void sendNTPpacket(IPAddress & address)
   Udp.endPacket();
 }
 
-// Todo: Not working properly
-////////////////////////////////////////////////////
-// Request OpenWeatherMap
-////////////////////////////////////////////////////
-void getWeather() {
-  String request = "/data/2.5/forecast/city?id=";
-  request += city_id;
-  request += "&APPID=";
-  request += API_key;
-  request += "&units=";
-  request += units;
-  request += "&cnt=";
-  request += no_3h_forecast;
-
-  String result;
-
-  char* buf = "";
-  request.toCharArray(buf, 160);
-
-  // Use WiFiClient class to create TCP connections
-  WiFiClient client;
-  const int httpPort = 80;
-  if (!client.connect(weather_host, httpPort)) {
-    Serial.println("connection failed");
-    return;
-  }
-
-  // This will send the request to the server +url after GET
-  client.print(String("GET ") + buf + " HTTP/1.1\r\n" +
-               "Host: " + weather_host + "\r\n" +
-               "Connection: close\r\n\r\n");
-
-  //Wait up to 5 seconds for server to respond then read response
-  int i = 0;
-  while ((!client.available()) && (i < 500)) {
-    delay(10);
-    i++;
-  }
-
-  // Read all the lines of the reply from server and print them to Serial
-  while (client.available()) {
-    String line = client.readStringUntil('\r');
-    Serial.println(line);
-  }
-
-  Serial.println();
-  Serial.println("closing connection");
-}
-
 ////////////////////////////////////////////////////
 // Check if all LEDs are working properly
 ////////////////////////////////////////////////////
@@ -868,21 +818,139 @@ void set_max_brightness() {
 //  }
 
 
-// Alternative to obtain weather data
-void getWeatherData() //client function to send/receive GET request data.
-{
+//// Get data from Openweathermap
+//void getWeatherData() //client function to send/receive GET request data.
+//{
+//
+//  WiFiClient client;
+//  char servername[] = "api.openweathermap.org"; // remote server we will connect to
+//  String result;
+//
+//  String CityID = "3220838"; // Munich
+//  String APIKEY = "";
+//
+//  if (client.connect(servername, 80)) {  //starts client connection, checks for connection
+//    client.println("GET /data/2.5/weather?id=" + CityID + "&units=metric&APPID=" + APIKEY);
+//    client.println("Host: api.openweathermap.org");
+//    client.println("User-Agent: ArduinoWiFi/1.1");
+//    client.println("Connection: close");
+//    client.println();
+//  }
+//  else {
+//    Serial.println("connection failed"); //error message if no client connect
+//    Serial.println();
+//  }
+//
+//  while (client.connected() && !client.available()) delay(1); //waits for data
+//  while (client.connected() || client.available()) { //connected or data available
+//    char c = client.read(); //gets byte from ethernet buffer
+//    result = result + c;
+//  }
+//
+//  client.stop(); //stop client
+//  result.replace('[', ' ');
+//  result.replace(']', ' ');
+//  Serial.println(result);
+//
+//  char jsonArray [result.length() + 1];
+//  result.toCharArray(jsonArray, sizeof(jsonArray));
+//  jsonArray[result.length() + 1] = '\0';
+//
+//  StaticJsonBuffer<1024> json_buf;
+//  JsonObject &root = json_buf.parseObject(jsonArray);
+//  if (!root.success())
+//  {
+//    Serial.println("parseObject() failed");
+//  }
+//
+//  // Example:
+//  // {"coord":{"lon":11.64,"lat":48.05},
+//  // "weather":{"id":800,"main":"Clear","description":"clear sky","icon":"01d"} ,
+//  // "base":"cmc stations",
+//  // "main":{"temp":29.38,"pressure":1018,"humidity":39,"temp_min":27.22,"temp_max":32.22},
+//  // "wind":{"speed":2.6,"deg":120},"clouds":{"all":0},"dt":1469020873,
+//  // "sys":{"type":3,"id":4887,"message":0.0034,"country":"DE","sunrise":1468985746,"sunset":1469041395},
+//  // "id":3220838,
+//  // "name":"Landkreis München",
+//  // "cod":200}
+//
+//  String location = root["name"];
+//  String country = root["sys"]["country"];
+//  float temperature = root["main"]["temp"];
+//  float humidity = root["main"]["humidity"];
+//  String weather = root["weather"]["main"];
+//  String description = root["weather"]["description"];
+//  float pressure = root["main"]["pressure"];
+//
+//  Serial.println("Weather:");
+//  Serial.println(description);
+//  Serial.println(location);
+//  Serial.println(country);
+//  Serial.println(temperature);
+//  Serial.println(humidity);
+//  Serial.println(pressure);
+//
+//}
 
+////////////////////////////////////////////////////
+// Get historic weather data for certain date from Wunderground
+////////////////////////////////////////////////////
+void getWeatherData()
+{
   WiFiClient client;
-  char servername[] = "api.openweathermap.org"; // remote server we will connect to
   String result;
 
-  String CityID = "3220838"; // Munich
-  String APIKEY = ""; // Enter API key here 
+  if (client.connect(weather_host, 80)) {  //starts client connection, checks for connection
 
-  if (client.connect(servername, 80)) {  //starts client connection, checks for connection
-    client.println("GET /data/2.5/weather?id=" + CityID + "&units=metric&APPID=" + APIKEY);
-    client.println("Host: api.openweathermap.org");
-    client.println("User-Agent: ArduinoWiFi/1.1");
+    // Convert day to format DD
+    String day_str;
+    if (day() < 10) {
+      day_str = "0";
+      day_str += String(day());
+    }
+    else {
+      day_str = String(day());
+    }
+
+    // Convert day to format MM
+    String month_str;
+    if (month() < 10) {
+      month_str = "0";
+      month_str += String(month());
+    }
+    else {
+      month_str = String(month());
+    }
+
+    // Request history current day
+    //    String request;
+    //    request += "GET /api/";
+    //    request += APIKEY;
+    //    request += "/history_";
+    //    request += String(year());
+    //    request += month_str;
+    //    request += day_str;
+    //    request += "/q/";
+    //    request += COUNTRY;
+    //    request += "/";
+    //    request += CITY;
+    //    request += ".json HTTP/1.1";
+
+    // Request current conditions
+    String request;
+    request += "GET /api/";
+    request += APIKEY;
+    request += "/conditions";
+    request += "/q/";
+    request += COUNTRY;
+    request += "/";
+    request += CITY;
+    request += ".json HTTP/1.1";
+
+    Serial.println(request);
+
+    client.println(request);
+    client.println("Host: api.wunderground.com");
     client.println("Connection: close");
     client.println();
   }
@@ -898,53 +966,55 @@ void getWeatherData() //client function to send/receive GET request data.
   }
 
   client.stop(); //stop client
-  result.replace('[', ' ');
-  result.replace(']', ' ');
-  Serial.println(result);
+  //  result.replace('[', ' ');
+  //  result.replace(']', ' ');
+//  Serial.println(result); // Computationally expensive
+
+  Serial.print("Result length: ");
+  Serial.println(result.length() + 1);
 
   char jsonArray [result.length() + 1];
   result.toCharArray(jsonArray, sizeof(jsonArray));
   jsonArray[result.length() + 1] = '\0';
+//
+//  StaticJsonBuffer<4096> json_buf;
+//  JsonObject &root = json_buf.parseObject(jsonArray);
+//  if (!root.success())
+//  {
+//    Serial.println("parseObject() failed");
+//  }
+//
+//  byte mday_res = root["history"]["observations"][0]["date"]["mday"];
+//  byte mon_res = root["history"]["observations"][0]["date"]["mon"];
+//  int year_res = root["history"]["observations"][0]["date"]["year"];
+//  byte hour_res = root["history"]["observations"][0]["date"]["hour"];
+//  byte min_res = root["history"]["observations"][0]["date"]["min"];
+//  float temp_res = root["history"]["observations"][0]["tempm"];
 
-  StaticJsonBuffer<1024> json_buf;
-  JsonObject &root = json_buf.parseObject(jsonArray);
-  if (!root.success())
-  {
-    Serial.println("parseObject() failed");
-  }
+//  Serial.println("Observation hour 0:");
+//  Serial.print(mday_res);
+//  Serial.print("-");
+//  Serial.print(mon_res);
+//  Serial.print("-");
+//  Serial.print(year_res);
+//  Serial.println("");
+//
+//  Serial.print(hour_res);
+//  Serial.print(":");
+//  Serial.print(min_res);
+//  Serial.println("");
+//
+//  Serial.print("Temperature: ");
+//  Serial.println(temp_res);
 
-  // Example:
-  // {"coord":{"lon":11.64,"lat":48.05},
-  // "weather":{"id":800,"main":"Clear","description":"clear sky","icon":"01d"} ,
-  // "base":"cmc stations",
-  // "main":{"temp":29.38,"pressure":1018,"humidity":39,"temp_min":27.22,"temp_max":32.22},
-  // "wind":{"speed":2.6,"deg":120},"clouds":{"all":0},"dt":1469020873,
-  // "sys":{"type":3,"id":4887,"message":0.0034,"country":"DE","sunrise":1468985746,"sunset":1469041395},
-  // "id":3220838,
-  // "name":"Landkreis München",
-  // "cod":200}
+  //  // Select 11*2h temperature forecast
+  //  for (byte i = 0; i <= 10; i++) {
+  //    temp_forecast[i] = root["hourly"]["data"][2 * i]["temperature"];
+  //  }
 
-  String location = root["name"];
-  String country = root["sys"]["country"];
-  float temperature = root["main"]["temp"];
-  float humidity = root["main"]["humidity"];
-  String weather = root["weather"]["main"];
-  String description = root["weather"]["description"];
-  float pressure = root["main"]["pressure"];
+//  String timeZone = root["timezone"];
 
-  Serial.println("Weather:");
-  Serial.println(description);
-  Serial.println(location);
-  Serial.println(country);
-  Serial.println(temperature);
-  Serial.println(humidity);
-  Serial.println(pressure);
-
-  //weatherDescription = description;
-  //weatherLocation = location;
-  //Country = country;
-  //Temperature = temperature;
-  //Humidity = humidity;
-  //Pressure = pressure;
+  //display_temp_forecast();
+  //Serial.println("Weather:");
 
 }
