@@ -55,7 +55,7 @@ byte brightness_inc = 10;
 // Initialize LEDs
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(256, PIN, NEO_GRB + NEO_KHZ800);
 
-// Network server stuff
+// Stuff for static IP
 //IPAddress ip(192,168,0,128);  //Node static IP
 //IPAddress gateway(192,168,0,1);
 //IPAddress subnet(255,255,255,0);
@@ -737,6 +737,8 @@ void getWeather() {
 ////////////////////////////////////////////////////
 void LED_test() {
 
+  byte test_brightness = 100;
+
   for (byte n = 0; n <= 3; n++) { // 3 times
     for (byte i = 0; i <= 9; i++) { // rows
       
@@ -745,16 +747,16 @@ void LED_test() {
       for (byte j = 0; j <= 10; j++) { // columns
         switch (n) {
           case 0: // Red
-            pixels.setPixelColor(LED_matrix[i][j] - 1, pixels.Color(100, 0, 0));
+            pixels.setPixelColor(LED_matrix[i][j] - 1, pixels.Color(test_brightness, 0, 0));
             break;
           case 1: // Green
-            pixels.setPixelColor(LED_matrix[i][j] - 1, pixels.Color(0, 100, 0));
+            pixels.setPixelColor(LED_matrix[i][j] - 1, pixels.Color(0, test_brightness, 0));
             break;
           case 2: // Blue
-            pixels.setPixelColor(LED_matrix[i][j] - 1, pixels.Color(0, 0, 100));
+            pixels.setPixelColor(LED_matrix[i][j] - 1, pixels.Color(0, 0, test_brightness));
             break;
           case 3: // White
-            pixels.setPixelColor(LED_matrix[i][j] - 1, pixels.Color(100, 100, 100));
+            pixels.setPixelColor(LED_matrix[i][j] - 1, pixels.Color(test_brightness, test_brightness, test_brightness));
             break;
         }
       }
@@ -787,47 +789,50 @@ void show_day() {
 ////////////////////////////////////////////////////
 void get_brightness() {
 
-      // Read LDR
-      int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
-      
-      // print the results to the serial monitor:
-      Serial.print("sensor = ");
-      Serial.print(sensorValue);
-      Serial.println();
-      
-      // Todo: Mapping anpassen
-      int min_brightness = EEPROM.read(0);
-      int max_brightness = EEPROM.read(1);
-      int min_LDR_value = EEPROM.read(2);
-      int max_LDR_value = EEPROM.read(3);
-      brightness = map(sensorValue, min_LDR_value, max_LDR_value, min_brightness, max_brightness);
-      brightness = 200 - brightness + 5; // Todo: Überprüfen
-      brightness = constrain(brightness, 5, 255);
-      
+  // Read LDR
+  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+
+  // Todo: Mapping anpassen
+  //  int min_user_brightness = EEPROM.read(0);
+  //  int max_user_brightness = EEPROM.read(1);
+  //  int min_LDR_value = EEPROM.read(2);
+  //  int max_LDR_value = EEPROM.read(3);
+  //  brightness = map(sensorValue, min_LDR_value, max_LDR_value, min_user_brightness, max_user_brightness);
+  //  brightness = 200 - brightness + 5; // Todo: Überprüfen
+  //  brightness = constrain(brightness, min_brightness, max_brightness);
+
+  // Print sensor value to serial monitor
+  Serial.print("Sensor value: ");
+  Serial.println(sensorValue);
+  Serial.print("Brightness: ");
+  Serial.println(brightness);
+
 }
 
 ////////////////////////////////////////////////////
 // Set minimum brightness
 ////////////////////////////////////////////////////
 void set_min_brightness() {
-  
-    // Read the analog in value
-    int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
-    EEPROM.write(0, brightness); // Max brightness
-    EEPROM.write(2, sensorValue); // Correspondig LDR value
-    
+
+  // Read the analog in value
+  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+  EEPROM.write(0, brightness); // Min brightness set by user
+  EEPROM.write(2, sensorValue); // Correspondig LDR value
+  EEPROM.commit();
+
 }
 
 ////////////////////////////////////////////////////
 // Set maximum brightness
 ////////////////////////////////////////////////////
 void set_max_brightness() {
-  
-    // Read the analog in value
-    int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
-    EEPROM.write(1, brightness); // Max brightness
-    EEPROM.write(3, sensorValue); // Correspondig LDR value
-    
+
+  // Read the analog in value
+  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+  EEPROM.write(1, brightness); // Max brightness set by user
+  EEPROM.write(3, sensorValue); // Correspondig LDR value
+  EEPROM.commit();
+
 }
 
 //  // Test numbers
