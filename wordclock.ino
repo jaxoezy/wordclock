@@ -49,7 +49,9 @@ const char no_3h_forecast[] = "1"; // No. consecutive 3h forecast
 #define PIN D1 // LED data pin
 const int analogInPin = A0;  // Analog input pin that the potentiometer is attached to
 
-int brightness = 30;
+byte brightness = 30;
+byte min_brightness = 5;
+byte max_brightness = 255;
 byte brightness_inc = 10;
 
 // Initialize LEDs
@@ -237,14 +239,6 @@ void setup() {
     server.send(200, "text/html", webPage);
   });
 
-  server.on("/led_test", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Testing all LEDs");
-    LED_test();
-    settings_changed = true;
-    delay(1000);
-  });
-
   server.on("/day_of_month", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Displaying day of month");
@@ -336,11 +330,19 @@ void setup() {
     delay(1000);
   });
 
+  server.on("/led_test", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Testing all LEDs");
+    LED_test();
+    settings_changed = true;
+    delay(1000);
+  });
+
   server.on("/inc_brightness", []() {
     server.send(200, "text/html", webPage);
     Serial.print("Increasing LED brightness to ");
     brightness += brightness_inc;
-    brightness = constrain(brightness, 5, 255);
+    brightness = constrain(brightness, min_brightness, max_brightness);
     Serial.print(brightness);
     Serial.println("");
     settings_changed = true;
@@ -351,7 +353,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.print("Decreasing LED brightness to ");
     brightness -= brightness_inc;
-    brightness = constrain(brightness, 5, 255);
+    brightness = constrain(brightness, min_brightness, max_brightness);
     Serial.print(brightness);
     Serial.println("");
     settings_changed = true;
@@ -378,7 +380,7 @@ void setup() {
   Serial.println("HTTP server started");
 
   //getWeather();
-  getWeatherData();
+//  getWeatherData();
 
 }
 
