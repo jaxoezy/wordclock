@@ -1,22 +1,19 @@
 // Todo: Englisch/Deutsch
 // Temperatur aus Internet lesen und für bestimmte Zeit anzeigen
 // Standard-Farbe einstellen (RGB?)
-// Einstellungen in EEProm abspeichern
 // WifiManager sollte hinzugefügt werden
 // IP von Webserver ist nicht konstant -> mit Felix besprechen
 // Nachgucken, wie deep sleep funktioniert
 // Uhr nachts zu einer bestimmten Zeit ausschalten und morgens wieder einschalten (ESP.deepSleep(10s*1000000))
 // -> Zeiten sollten manuell einstellbar sein
+// Wie genau ist Zeit bei deep sleep?
 // Sollte man den ESP auch für die einzelnen Minuten ausschalten, um maximal Strom zu sparen?
 // Er müsste sich jede Minute neu zu dem Netzwerk verbinden ... hmmm ...
-
-// LEDs: 10 hoch, 11 breit
-// Wetter: Temperatur
-// Sonnig, leicht bewölkt, bewölkt, Regen
 // Optional:
 // 1. Geo-Koordinaten bestimmen (https://askgeo.com)
 // 2. Zeitzone bestimmen (timezonedb.com)
 // 3. Wetter abfragen (http://openweathermap.org/)
+// LEDs: 10 hoch, 11 breit
 
 #include <Adafruit_NeoPixel.h>
 #include <TimeLib.h>
@@ -29,6 +26,7 @@
 #include <ArduinoJson.h>
 
 // Network
+// München
 const char ssid[] = "";  //  your network SSID (name)
 const char pass[] = "";       // your network password
 
@@ -162,10 +160,19 @@ byte minutes = 0;
 byte five_min = 0;
 byte single_min = 0;
 
-boolean en_es_ist = true;
-boolean en_uhr = true;
-boolean en_single_min = true;
+byte en_es_ist;
+byte en_uhr;
+byte en_single_min;
 boolean settings_changed = false;
+
+// EEPROM assignment:
+// 0: Min brightness set by user (0-255)
+// 1: Correspondig LDR value (0-255)
+// 2: Max brightness set by user (0-255)
+// 3: Correspondig LDR value (0-255)
+// 4: "Es ist": 1 = on, 0 = off
+// 5: "Uhr": 1 = on, 0 = off
+// 6: Display single minutes: 1 = on, 0 = off
 
 ////////////////////////////////////////////////////
 // Setup routine
@@ -173,13 +180,21 @@ boolean settings_changed = false;
 void setup() {
   Serial.begin (9600);
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
+
+  // Read settings from EEPROM
+  en_es_ist = EEPROM.read(4);
+  en_uhr = EEPROM.read(5);
+  en_single_min = EEPROM.read(6);
   
   // Execute this code only once to initialize default brightness
-//  EEPROM.write(0, 10); // Min brightness set by user
-//  EEPROM.write(1, 0); // Correspondig LDR value
-//  EEPROM.write(2, 50); // Max brightness set by user
-//  EEPROM.write(3, 255); // Correspondig LDR value
-//  EEPROM.commit();
+  //  EEPROM.write(0, 10); // Min brightness set by user
+  //  EEPROM.write(1, 0); // Correspondig LDR value
+  //  EEPROM.write(2, 50); // Max brightness set by user
+  //  EEPROM.write(3, 255); // Correspondig LDR value
+  //  EEPROM.write(4, 1); // "Es ist"
+  //  EEPROM.write(5, 1); // "Uhr"
+  //  EEPROM.write(6, 1); // Display singles minutes
+  //  EEPROM.commit();
 
   // Initialize maxtrix indices (cannot be done before setup)
   for (byte i = 0; i <= 9; i++) { // rows
@@ -193,6 +208,7 @@ void setup() {
     }
   }
 
+  // HTML website for server
   webPage += "<font size=""7""><h1>Wordclock Web Server</h1></font>";
   webPage += "<font size=""7""><p>Datum (Tag): <a href=\"day_of_month\"><button>Anzeigent</button></a></p></font>";
   webPage += "<font size=""7""><p>Sprache <a href=\"language_ger\"><button>Deutsch</button></a>&nbsp;<a href=\"language_en\"><button>Englisch</button></a></p></font>";
@@ -273,6 +289,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display 'Uhr': on");
     if (!en_uhr) {
+      EEPROM.write(5, 1);
       en_uhr = true;
       settings_changed = true;
     }
@@ -283,6 +300,8 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display 'Uhr': on");
     if (en_uhr) {
+      EEPROM.write(5, 0);
+      EEPROM.commit();
       en_uhr = false;
       settings_changed = true;
     }
@@ -293,6 +312,8 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display 'Es ist': on");
     if (!en_es_ist) {
+      EEPROM.write(4, 1);
+      EEPROM.commit();
       en_es_ist = true;
       settings_changed = true;
     }
@@ -303,6 +324,8 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display 'Es ist': off");
     if (en_es_ist) {
+      EEPROM.write(4, 0);
+      EEPROM.commit();
       en_es_ist = false;
       settings_changed = true;
     }
@@ -313,6 +336,8 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display single minute LEDs: on");
     if (!en_single_min) {
+      EEPROM.write(6, 1);
+      EEPROM.commit();
       en_single_min = true;
       settings_changed = true;
     }
@@ -323,6 +348,8 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display single minute LEDs: off");
     if (en_single_min) {
+      EEPROM.write(6, 0);
+      EEPROM.commit();
       en_single_min = false;
       settings_changed = true;
     }
