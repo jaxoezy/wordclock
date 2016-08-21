@@ -173,14 +173,13 @@ boolean settings_changed = false;
 void setup() {
   Serial.begin (9600);
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
-  // Execute this line only once to initialize default brightness
-  // EEPROM.write(0, 30); // Default brightness: 30/255
-  // brightness = EEPROM.read(0); // Todo: Use for brightness
-  // EEPROM:
-  // 0: min_brightness
-  // 1: max_brightness
-  // 2: min_LDR_value
-  // 3: max_LDR_value
+  
+  // Execute this code only once to initialize default brightness
+//  EEPROM.write(0, 10); // Min brightness set by user
+//  EEPROM.write(1, 0); // Correspondig LDR value
+//  EEPROM.write(2, 50); // Max brightness set by user
+//  EEPROM.write(3, 255); // Correspondig LDR value
+//  EEPROM.commit();
 
   // Initialize maxtrix indices (cannot be done before setup)
   for (byte i = 0; i <= 9; i++) { // rows
@@ -245,7 +244,7 @@ void setup() {
     show_day();
     settings_changed = true;
     delay(1000);
-  });  
+  });
 
   server.on("/disp_temp", []() {
     server.send(200, "text/html", webPage);
@@ -379,8 +378,9 @@ void setup() {
   server.begin();
   Serial.println("HTTP server started");
 
-  //getWeather();
-//  getWeatherData();
+  getWeatherData();
+
+  //  get_brightness();
 
 }
 
@@ -396,13 +396,13 @@ void loop() {
 
   server.handleClient();
 
-  // Determine LED brightness based on LDR measurement
-  // get_brightness();
-
   // Update everything only if minutes or settings have changed
   if (timeStatus() != timeNotSet) {
     if (minute() != prevDisplay || settings_changed) { // Alternative: now()
-      
+
+      // Determine LED brightness based on LDR measurement
+      get_brightness();
+
       // Determine and display time
       clock_display(); // Real clock
       serial_clock_display(); // Serial port
@@ -743,9 +743,9 @@ void LED_test() {
 
   for (byte n = 0; n <= 3; n++) { // 3 times
     for (byte i = 0; i <= 9; i++) { // rows
-      
+
       disable_all_led();
-      
+
       for (byte j = 0; j <= 10; j++) { // columns
         switch (n) {
           case 0: // Red
@@ -766,24 +766,24 @@ void LED_test() {
       delay(400);
     }
   }
-  
+
 }
 
 ////////////////////////////////////////////////////
 // Display current weekday
 ////////////////////////////////////////////////////
 void show_day() {
-  
+
   disable_all_led();
-  
-  byte day_left = (day() - day() % 10)/10;
+
+  byte day_left = (day() - day() % 10) / 10;
   byte day_right = day() % 10;
   send_num_2_LED(numbers_left[day_left]);
   send_num_2_LED(numbers_right[day_right]);
 
   pixels.show(); // This sends the updated pixel color to the hardware.
   delay(2000);
-  
+
 }
 
 ////////////////////////////////////////////////////
@@ -792,23 +792,24 @@ void show_day() {
 void get_brightness() {
 
   // Read LDR
-  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+  int sensorValue = analogRead(analogInPin)/4; // Value between 0 and 1023
 
-  // Todo: Mapping anpassen
-  //  int min_user_brightness = EEPROM.read(0);
-  //  int max_user_brightness = EEPROM.read(1);
-  //  int min_LDR_value = EEPROM.read(2);
-  //  int max_LDR_value = EEPROM.read(3);
-  //  brightness = map(sensorValue, min_LDR_value, max_LDR_value, min_user_brightness, max_user_brightness);
-  //  brightness = 200 - brightness + 5; // Todo: Überprüfen
-  //  brightness = constrain(brightness, min_brightness, max_brightness);
+  int min_user_brightness = EEPROM.read(0);
+  int max_user_brightness = EEPROM.read(2);
+  if(min_user_brightness > max_user_brightness) {
+      max_user_brightness = min_user_brightness;
+  }
+  int min_sensor_value = EEPROM.read(1);
+  int max_sensor_value = EEPROM.read(3);
+  brightness = map(sensorValue, min_sensor_value, max_sensor_value, min_user_brightness, max_user_brightness);
+  brightness = constrain(brightness, min_brightness, max_brightness);
 
   // Print sensor value to serial monitor
   Serial.print("Sensor value: ");
-  Serial.println(sensorValue);
-  Serial.print("Brightness: ");
-  Serial.println(brightness);
-
+  Serial.print(sensorValue);
+  Serial.print("/255, Brightness: ");
+  Serial.print(brightness);
+  Serial.println("/255");
 }
 
 ////////////////////////////////////////////////////
@@ -817,7 +818,7 @@ void get_brightness() {
 void set_min_brightness() {
 
   // Read the analog in value
-  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+  byte sensorValue = analogRead(analogInPin)/4; // Value between 0 and 1023/4
   EEPROM.write(0, brightness); // Min brightness set by user
   EEPROM.write(2, sensorValue); // Correspondig LDR value
   EEPROM.commit();
@@ -830,7 +831,7 @@ void set_min_brightness() {
 void set_max_brightness() {
 
   // Read the analog in value
-  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+  byte sensorValue = analogRead(analogInPin)/4; // Value between 0 and 1023
   EEPROM.write(1, brightness); // Max brightness set by user
   EEPROM.write(3, sensorValue); // Correspondig LDR value
   EEPROM.commit();
@@ -849,101 +850,101 @@ void set_max_brightness() {
 //  }
 
 //  //  read temperature from somewhere
-  //  //  % Determine conservative temperature, quantisation: 3°C
-  //  byte temp_array[11] = {18, 20, 25, 19, 10, 12, 14, 16, 18, 20, 22};
-  //  byte weather_type[11] = {1, 2, 4, 3, 10, 3, 14, 16, 18, 20, 22};
-  //
-  //  // Display temperature and weather
-  //  for (byte i = 0; i <= 10; i++) {
-  //    temp = temp_array[i];
-  //    temp = constrain(temp, -3, 24); // Temperatur range: -3...25 °C
-  //    temp = temp + 3; // shift such that -3 °C has index 0
-  //    temp = temp - temp % 3;
-  //    temp_max_index = temp / 3; // LED with largest index
-  //    // Display temperature and weather type
-  //    for (byte j = 0; j <= temp_max_index; j++) {
-  //      pixels.setPixelColor(LED_matrix[i][j], pixels.Color(weather_color[weather_type[i]][1], weather_color[weather_type[i]][2], weather_color[weather_type[i]][3]));
-  //    }
-  //  }
+//  //  % Determine conservative temperature, quantisation: 3°C
+//  byte temp_array[11] = {18, 20, 25, 19, 10, 12, 14, 16, 18, 20, 22};
+//  byte weather_type[11] = {1, 2, 4, 3, 10, 3, 14, 16, 18, 20, 22};
+//
+//  // Display temperature and weather
+//  for (byte i = 0; i <= 10; i++) {
+//    temp = temp_array[i];
+//    temp = constrain(temp, -3, 24); // Temperatur range: -3...25 °C
+//    temp = temp + 3; // shift such that -3 °C has index 0
+//    temp = temp - temp % 3;
+//    temp_max_index = temp / 3; // LED with largest index
+//    // Display temperature and weather type
+//    for (byte j = 0; j <= temp_max_index; j++) {
+//      pixels.setPixelColor(LED_matrix[i][j], pixels.Color(weather_color[weather_type[i]][1], weather_color[weather_type[i]][2], weather_color[weather_type[i]][3]));
+//    }
+//  }
 
 
 // Alternative to obtain weather data
 void getWeatherData() //client function to send/receive GET request data.
 {
-  
+
   WiFiClient client;
-  char servername[]="api.openweathermap.org";  // remote server we will connect to
+  char servername[] = "api.openweathermap.org"; // remote server we will connect to
   String result;
-  
+
   String CityID = "3220838"; // Munich
-  String APIKEY = "";
+  String APIKEY = ""; // Enter API key here 
 
   if (client.connect(servername, 80)) {  //starts client connection, checks for connection
-    client.println("GET /data/2.5/weather?id="+CityID+"&units=metric&APPID="+APIKEY);
+    client.println("GET /data/2.5/weather?id=" + CityID + "&units=metric&APPID=" + APIKEY);
     client.println("Host: api.openweathermap.org");
     client.println("User-Agent: ArduinoWiFi/1.1");
     client.println("Connection: close");
     client.println();
-  } 
+  }
   else {
     Serial.println("connection failed"); //error message if no client connect
     Serial.println();
   }
 
-  while(client.connected() && !client.available()) delay(1); //waits for data
+  while (client.connected() && !client.available()) delay(1); //waits for data
   while (client.connected() || client.available()) { //connected or data available
     char c = client.read(); //gets byte from ethernet buffer
-      result = result+c;
-    }
+    result = result + c;
+  }
 
   client.stop(); //stop client
   result.replace('[', ' ');
   result.replace(']', ' ');
   Serial.println(result);
 
-char jsonArray [result.length()+1];
-result.toCharArray(jsonArray,sizeof(jsonArray));
-jsonArray[result.length() + 1] = '\0';
+  char jsonArray [result.length() + 1];
+  result.toCharArray(jsonArray, sizeof(jsonArray));
+  jsonArray[result.length() + 1] = '\0';
 
-StaticJsonBuffer<1024> json_buf;
-JsonObject &root = json_buf.parseObject(jsonArray);
-if (!root.success())
-{
-  Serial.println("parseObject() failed");
-}
+  StaticJsonBuffer<1024> json_buf;
+  JsonObject &root = json_buf.parseObject(jsonArray);
+  if (!root.success())
+  {
+    Serial.println("parseObject() failed");
+  }
 
-// Example:
-// {"coord":{"lon":11.64,"lat":48.05},
-// "weather":{"id":800,"main":"Clear","description":"clear sky","icon":"01d"} ,
-// "base":"cmc stations",
-// "main":{"temp":29.38,"pressure":1018,"humidity":39,"temp_min":27.22,"temp_max":32.22},
-// "wind":{"speed":2.6,"deg":120},"clouds":{"all":0},"dt":1469020873,
-// "sys":{"type":3,"id":4887,"message":0.0034,"country":"DE","sunrise":1468985746,"sunset":1469041395},
-// "id":3220838,
-// "name":"Landkreis München",
-// "cod":200}
+  // Example:
+  // {"coord":{"lon":11.64,"lat":48.05},
+  // "weather":{"id":800,"main":"Clear","description":"clear sky","icon":"01d"} ,
+  // "base":"cmc stations",
+  // "main":{"temp":29.38,"pressure":1018,"humidity":39,"temp_min":27.22,"temp_max":32.22},
+  // "wind":{"speed":2.6,"deg":120},"clouds":{"all":0},"dt":1469020873,
+  // "sys":{"type":3,"id":4887,"message":0.0034,"country":"DE","sunrise":1468985746,"sunset":1469041395},
+  // "id":3220838,
+  // "name":"Landkreis München",
+  // "cod":200}
 
-String location = root["name"];
-String country = root["sys"]["country"];
-float temperature = root["main"]["temp"];
-float humidity = root["main"]["humidity"];
-String weather = root["weather"]["main"];
-String description = root["weather"]["description"];
-float pressure = root["main"]["pressure"];
+  String location = root["name"];
+  String country = root["sys"]["country"];
+  float temperature = root["main"]["temp"];
+  float humidity = root["main"]["humidity"];
+  String weather = root["weather"]["main"];
+  String description = root["weather"]["description"];
+  float pressure = root["main"]["pressure"];
 
-Serial.println("Weather:");
-Serial.println(description);
-Serial.println(location);
-Serial.println(country);
-Serial.println(temperature);
-Serial.println(humidity);
-Serial.println(pressure);
+  Serial.println("Weather:");
+  Serial.println(description);
+  Serial.println(location);
+  Serial.println(country);
+  Serial.println(temperature);
+  Serial.println(humidity);
+  Serial.println(pressure);
 
-//weatherDescription = description;
-//weatherLocation = location;
-//Country = country;
-//Temperature = temperature;
-//Humidity = humidity;
-//Pressure = pressure;
+  //weatherDescription = description;
+  //weatherLocation = location;
+  //Country = country;
+  //Temperature = temperature;
+  //Humidity = humidity;
+  //Pressure = pressure;
 
 }
