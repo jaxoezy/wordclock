@@ -2,23 +2,13 @@
 #include <TimeLib.h>
 #include <ESP8266WiFi.h>
 #include <WiFiUdp.h>
-#include <WiFiClient.h>
+//#include <WiFiClient.h>
 #include <ESP8266WebServer.h>
 #include <ESP8266mDNS.h>
 #include <EEPROM.h>
 #include <ArduinoJson.h>
-
-// Network
-// München
-const char ssid[] = "";  //  your network SSID (name)
-const char pass[] = "";       // your network password
-
-// Weather forecast Openweathermap
-//const char weather_host[] = "api.openweathermap.org";
-//const char city_id[] = "3220838"; // Munich
-//const char API_key[] = ""; // Openweathermap API key
-//const char units[] = "metric"; // °C
-//const char no_3h_forecast[] = "1"; // No. consecutive 3h forecast
+#include <DNSServer.h>
+#include <WiFiManager.h>
 
 // Weather forecast Wunderground
 const char weather_host[] = "api.wunderground.com";
@@ -30,18 +20,13 @@ const char APIKEY[] = ""; // Wunderground API key
 #define PIN D1 // LED data pin
 const int analogInPin = A0;  // Analog input pin that the potentiometer is attached to
 
-byte brightness = 30;
+byte brightness = 255; //
 byte min_brightness = 5;
 byte max_brightness = 255;
 byte brightness_inc = 10;
 
 // Initialize LEDs
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(256, PIN, NEO_GRB + NEO_KHZ800);
-
-// Stuff for static IP
-//IPAddress ip(192,168,0,128);  //Node static IP
-//IPAddress gateway(192,168,0,1);
-//IPAddress subnet(255,255,255,0);
 
 MDNSResponder mdns;
 ESP8266WebServer server(80);
@@ -58,126 +43,223 @@ void sendNTPpacket(IPAddress &address);
 const int timeZone = 1;     // Central European Time
 int summertime = 0;
 
+int ambimode = 0;
+int led = 0;
+
 // German
-byte es_ist[7] =      {195, 196, 198, 199, 200,   0,   0};
-byte fuenf_min[7] =   {202, 203, 204, 205,   0,   0,   0};
-byte zehn_min[7] =    {180, 181, 182, 183,   0,   0,   0};
-byte viertel_min[7] = {167, 168, 169, 170, 171, 172, 173};
-byte zwanzig_min[7] = {190, 189, 188, 187, 186, 185, 184};
-byte nach[7] =        {148, 149, 150, 151,   0,   0,   0};
-byte vor[7] =         {154, 155, 156,   0,   0,   0,   0};
-byte halb[7] =        {131, 132, 133, 134,   0,   0,   0};
-byte ein_std[7] =     {124, 123, 122,   0,   0,   0,   0};
-byte eins_std[7] =    {124, 123, 122, 121,   0,   0,   0};
-byte zwei_std[7] =    { 92,  91,  90,  89,   0,   0,   0};
-byte drei_std[7] =    {126, 125, 124, 123,   0,   0,   0};
-byte vier_std[7] =    { 99, 100, 101, 102,   0,   0,   0};
-byte fuenf_std[7] =   {106, 107, 108, 109,   0,   0,   0};
-byte sechs_std[7] =   { 88,  87,  86,  85,  84,   0,   0};
-byte sieben_std[7] =  {116, 117, 118, 119, 120, 121,   0};
-byte acht_std[7] =    { 68,  69,  70,  71,   0,   0,   0};
-byte neun_std[7] =    { 59,  58,  57,  56,   0,   0,   0};
-byte zehn_std[7] =    { 62,  61,  60,  59,   0,   0,   0};
-byte elf_std[7] =     {104, 105, 106,   0,   0,   0,   0};
-byte zwoelf_std[7] =  { 73,  74,  75,  76,  77,   0,   0};
-byte null_std[7] =    {136, 137, 138, 139,   0,   0,   0};
-byte uhr[7] =         { 54,  53,  52,   0,   0,   0,   0};
-byte* hours_disp[13] = {null_std, eins_std, zwei_std, drei_std, vier_std, fuenf_std, sechs_std, sieben_std, acht_std, neun_std, zehn_std, elf_std, zwoelf_std};
-byte* full_hours_disp[13] = {null_std, ein_std, zwei_std, drei_std, vier_std, fuenf_std, sechs_std, sieben_std, acht_std, neun_std, zehn_std, elf_std, zwoelf_std};
+byte es_ist[7] =      {1, 2, 4, 5, 6, 0, 0};
+byte fuenf_min[7] =   {8, 9, 10, 11, 0, 0, 0};
+byte zehn_min[7] =    {12, 13, 14, 15, 0, 0, 0};
+byte viertel_min[7] = {27, 28, 29, 30, 31, 32, 33};
+byte zwanzig_min[7] = {22, 21, 20, 19, 18, 17, 16};
+byte nach[7] =        {34, 35, 36, 37, 0, 0, 0};
+byte vor[7] =         {40, 41, 42, 0, 0, 0, 0};
+byte halb[7] =        {45, 46, 47, 48, 0, 0, 0};
+byte ein_std[7] =     {64, 63, 62, 0, 0, 0, 0};
+byte eins_std[7] =    {64, 63, 62, 61, 0, 0, 0};
+byte zwei_std[7] =    {86, 85, 84, 83, 0, 0, 0};
+byte drei_std[7] =    {66, 65, 64, 63, 0, 0, 0};
+byte vier_std[7] =    {67, 68, 69, 70, 0, 0, 0};
+byte fuenf_std[7] =   {74, 75, 76, 77, 0, 0, 0};
+byte sechs_std[7] =   {82, 81, 80, 79, 78, 0, 0};
+byte sieben_std[7] =  {56, 57, 58, 59, 60, 61, 0};
+byte acht_std[7] =    {90, 91, 92, 93, 0, 0, 0};
+byte neun_std[7] =    {107, 106, 105, 104, 0, 0, 0};
+byte zehn_std[7] =    {110, 109, 108, 107, 0, 0, 0};
+byte elf_std[7] =     {72, 73, 74, 0, 0, 0, 0};
+byte zwoelf_std[7] =  {95, 96, 97, 98, 99, 0, 0};
+byte null_std[7] =    {50, 51, 52, 53, 0, 0, 0};
+byte uhr[7] =         {102, 101, 100, 0, 0, 0, 0};
+byte* hours_GER[13] = {null_std, eins_std, zwei_std, drei_std, vier_std, fuenf_std, sechs_std, sieben_std, acht_std, neun_std, zehn_std, elf_std, zwoelf_std};
+byte* full_hours_GER[13] = {null_std, ein_std, zwei_std, drei_std, vier_std, fuenf_std, sechs_std, sieben_std, acht_std, neun_std, zehn_std, elf_std, zwoelf_std};
+
+// English
+byte it_is[7] =       {  1,   2,   4,   5,   0,   0,   0};
+byte five_min[7] =    { 29,  30,  31,  32,   0,   0,   0};
+byte ten_min[7] =     { 37,  38,  39,   0,   0,   0,   0};
+byte quarter_min[7] = { 14,  15,  16,  17,  18,  19,  20};
+byte twenty_min[7] =  { 23,  24,  25,  26,  27,  28,   0};
+byte past[7] =        { 45,  46,  47,  48,   0,   0,   0};
+byte to[7] =          { 34,  35,   0,   0,   0,   0,   0};
+byte half[7] =        { 41,  42,  43,  44,   0,   0,   0};
+byte one_std[7] =     { 64,  65,  66,   0,   0,   0,   0};
+byte two_std[7] =     { 75,  76,  77,   0,   0,   0,   0};
+byte three_std[7] =   { 56,  57,  58,  59,  60,   0,   0};
+byte four_std[7] =    { 67,  68,  69,  70,   0,   0,   0};
+byte five_std[7] =    { 71,  72,  73,  74,   0,   0,   0};
+byte six_std[7] =     { 61,  62,  63,   0,   0,   0,   0};
+byte seven_std[7] =   { 89,  90,  91,  92,  93,   0,   0};
+byte eight_std[7] =   { 84,  85,  86,  87,  88,   0,   0};
+byte nine_std[7] =    { 52,  53,  54,  55,   0,   0,   0};
+byte ten_std[7] =     {108, 109, 110,   0,   0,   0,   0};
+byte eleven_std[7] =  { 78,  79,  80,  81,  82,  83,   0};
+byte twelve_std[7] =  { 94,  95,  96,  97,  98,  99,   0};
+//byte null_std[7] =    { 50,  51,  52,  53,   0,   0,   0};
+byte oclock[7] =      {100, 101, 102, 103, 104, 105,   0};
+byte am[7] =          {  8,   9,   0,   0,   0,   0,   0};
+byte pm[7] =          { 10,  11,   0,   0,   0,   0,   0};
+byte* hours_EN[13] = {twelve_std, one_std, two_std, three_std, four_std, five_std, six_std, seven_std, eight_std, nine_std, ten_std, eleven_std, twelve_std};
 
 // Single minutes
-byte min_1[7] = {1,   0,   0,  0, 0, 0, 0};
-byte min_2[7] = {1, 255,   0,  0, 0, 0, 0};
-byte min_3[7] = {1, 255, 241,  0, 0, 0, 0};
-byte min_4[7] = {1, 255, 241, 16, 0, 0, 0};
+byte min_1[7] = {114,   0,   0,  0, 0, 0, 0};
+byte min_2[7] = {114, 113,   0,  0, 0, 0, 0};
+byte min_3[7] = {114, 113, 112,  0, 0, 0, 0};
+byte min_4[7] = {114, 113, 112, 111, 0, 0, 0};
 byte* single_mins[4] = {min_1, min_2, min_3, min_4};
 
 // Numbers
-// Todo: Datentyp anpassen
-byte left_1[17] =  {156, 166, 186, 167, 154, 135, 122, 103,  90,   0,   0,   0,   0,   0,   0,   0,   0};
-byte right_1[17] = {150, 172, 180, 173, 148, 141, 116, 109,  84,   0,   0,   0,   0,   0,   0,   0,   0};
-byte left_2[17] =  {163, 189, 188, 187, 167, 154, 134, 124, 100,  94,  93,  92,  91,  90,   0,   0,   0};
-byte right_2[17] = {169, 183, 182, 181, 173, 148, 140, 118, 106,  88,  87,  86,  85,  84,   0,   0,   0};
-byte left_3[17] =  {163, 189, 188, 187, 167, 154, 134, 133, 122, 103,  91,  92,  93,  99,   0,   0,   0};
-byte right_3[17] = {169, 183, 182, 181, 173, 148, 140, 139, 116, 109,  85,  86,  87, 105,   0,   0,   0};
-byte left_4[17] =  {187, 166, 155, 134, 123, 102,  91, 122, 124, 125, 126, 131, 157, 165,   0,   0,   0};
-byte right_4[17] = {181, 172, 149, 140, 117, 108,  85, 116, 118, 119, 120, 137, 151, 171,   0,   0,   0};
-byte left_5[17] =  {186, 187, 188, 189, 190, 163, 158, 157, 156, 155, 135, 122, 103,  91,  92,  93,  99};
-byte right_5[17] = {180, 181, 182, 183, 184, 169, 152, 151, 150, 149, 141, 116, 109,  85,  86,  87, 105};
-byte left_6[17] =  {167, 187, 188, 189, 163, 158, 131, 126,  99,  93,  92,  91, 103, 122, 134, 133, 132};
-byte right_6[17] = {173, 181, 182, 183, 169, 152, 137, 120, 105,  87,  86,  85, 109, 116, 140, 139, 138};
-byte left_7[17] =  {93,  100, 125, 133, 155, 167, 186, 187, 188, 189, 190,   0,   0,   0,   0,   0,   0};
-byte right_7[17] = {87,  106, 119, 139, 149, 173, 180, 181, 182, 183, 184,   0,   0,   0,   0,   0,   0};
-byte left_8[17] =  {187, 188, 189, 132, 133, 134,  91,  92,  93, 103, 122, 154, 167,  99, 126, 158, 163};
-byte right_8[17] = {181, 182, 183, 138, 139, 140,  85,  86,  87, 109, 116, 148, 173, 169, 152, 120, 105};
-byte left_9[17] =  {187, 188, 189, 132, 133, 134,  91,  92,  93, 103, 122, 154, 167,  99, 158, 163,   0};
-byte right_9[17] = {181, 182, 183, 138, 139, 140,  85,  86,  87, 109, 116, 148, 173, 169, 152, 105,   0};
-byte left_0[17] =  {187, 188, 189,  91,  92,  93, 163, 158, 131, 126,  99, 103, 122, 135, 154, 167,   0};
-byte right_0[17] = {181, 182, 183, 169, 152, 137, 120, 105,  87,  86,  85, 109, 116, 141, 148, 173,   0};
+byte left_1[17] =  {42, 26, 18, 27, 40, 49, 62, 71, 84, 0, 0, 0, 0, 0, 0, 0, 0};
+byte right_1[17] = {36, 32, 12, 33, 34, 55, 56, 77, 78, 0, 0, 0, 0, 0, 0, 0, 0};
+byte left_2[17] =  {23, 21, 20, 19, 27, 40, 48, 64, 68, 88, 87, 86, 85, 84, 0, 0, 0};
+byte right_2[17] = {29, 15, 14, 13, 33, 34, 54, 58, 74, 82, 81, 80, 79, 78, 0, 0, 0};
+byte left_3[17] =  {23, 21, 20, 19, 27, 40, 48, 47, 62, 71, 85, 86, 87, 67, 0, 0, 0};
+byte right_3[17] = {29, 15, 14, 13, 33, 34, 54, 53, 56, 77, 79, 80, 81, 73, 0, 0, 0};
+byte left_4[17] =  {19, 26, 41, 48, 63, 70, 85, 62, 64, 65, 66, 45, 43, 25, 0, 0, 0};
+byte right_4[17] = {13, 32, 35, 54, 57, 76, 79, 56, 58, 59, 60, 51, 37, 31, 0, 0, 0};
+byte left_5[17] =  {18, 19, 20, 21, 22, 23, 44, 43, 42, 41, 49, 62, 71, 85, 86, 87, 67};
+byte right_5[17] = {12, 13, 14, 15, 16, 29, 38, 37, 36, 35, 55, 56, 77, 79, 80, 81, 73};
+byte left_6[17] =  {27, 19, 20, 21, 23, 44, 45, 66, 67, 87, 86, 85, 71, 62, 48, 47, 46};
+byte right_6[17] = {33, 13, 14, 15, 29, 38, 51, 60, 73, 81, 80, 79, 77, 56, 54, 53, 52};
+byte left_7[17] =  {87, 68, 65, 47, 41, 27, 18, 19, 20, 21, 22, 0, 0, 0, 0, 0, 0};
+byte right_7[17] = {81, 74, 59, 53, 35, 33, 12, 13, 14, 15, 16, 0, 0, 0, 0, 0, 0};
+byte left_8[17] =  {19, 20, 21, 46, 47, 48, 85, 86, 87, 71, 62, 40, 27, 67, 66, 44, 23};
+byte right_8[17] = {13, 14, 15, 52, 53, 54, 79, 80, 81, 77, 56, 34, 33, 29, 38, 60, 73};
+byte left_9[17] =  {19, 20, 21, 46, 47, 48, 85, 86, 87, 71, 62, 40, 27, 67, 44, 23, 0};
+byte right_9[17] = {13, 14, 15, 52, 53, 54, 79, 80, 81, 77, 56, 34, 33, 29, 38, 73, 0};
+byte left_0[17] =  {19, 20, 21, 85, 86, 87, 23, 44, 45, 66, 67, 71, 62, 49, 40, 27, 0};
+byte right_0[17] = {13, 14, 15, 29, 38, 51, 60, 73, 81, 80, 79, 77, 56, 55, 34, 33, 0};
 
 byte* numbers_left[10] = {left_0, left_1, left_2, left_3, left_4, left_5, left_6, left_7, left_8, left_9};
 byte* numbers_right[10] = {right_0, right_1, right_2, right_3, right_4, right_5, right_6, right_7, right_8, right_9};
 
 // LED matrix indices
 byte LED_matrix[10][11];
-byte row_offset[10] = {62, 67, 94, 99, 126, 131, 158, 163, 190, 195};
+byte row_offset[10] = {1, 22, 23, 44, 45, 66, 67, 88, 89, 110};
 
 byte hours = 0;
 byte minutes = 0;
-byte five_min = 0;
+byte min_five = 0;
 byte single_min = 0;
 
+byte min_user_brightness;
+byte max_user_brightness;
+byte min_LDR_value;
+byte max_LDR_value;
 byte en_es_ist;
 byte en_uhr;
 byte en_single_min;
+byte en_ambilight;
 boolean settings_changed = false;
+int language;
+byte en_nighttime = 1;
+byte t_night_1;
+byte t_night_2;
+byte R_clock;
+byte G_clock;
+byte B_clock;
+byte R_ambilight;
+byte G_ambilight;
+byte B_ambilight;
 
-// EEPROM assignment:
-// 0: Min brightness set by user (0-255)
-// 1: Correspondig LDR value (0-255)
-// 2: Max brightness set by user (0-255)
-// 3: Correspondig LDR value (0-255)
-// 4: "Es ist": 1 = on, 0 = off
-// 5: "Uhr": 1 = on, 0 = off
-// 6: Display single minutes: 1 = on, 0 = off
+// EEPROM address assignment
+const int EEPROM_addr_min_brightness = 0;
+const int EEPROM_addr_LDR_min = 1;
+const int EEPROM_addr_max_brightness = 2;
+const int EEPROM_addr_LDR_max = 3;
+const int EEPROM_addr_es_ist = 4;
+const int EEPROM_addr_uhr = 5;
+const int EEPROM_addr_single_min = 6;
+const int EEPROM_addr_ambilight = 7;
+const int EEPROM_addr_language = 8;
+const int EEPROM_addr_t_night_1 = 9;
+const int EEPROM_addr_t_night_2 = 10;
+const int EEPROM_addr_R_clock = 11;
+const int EEPROM_addr_G_clock = 12;
+const int EEPROM_addr_B_clock = 13;
+const int EEPROM_addr_R_ambilight = 14;
+const int EEPROM_addr_G_ambilight = 15;
+const int EEPROM_addr_B_ambilight = 16;
 
 ////////////////////////////////////////////////////
 // Setup routine
 ////////////////////////////////////////////////////
 void setup() {
   Serial.begin (9600);
+
+  WiFiManager wifiManager;
+  //reset settings - for testing
+  //wifiManager.resetSettings();
+
+  //set callback that gets called when connecting to previous WiFi fails, and enters Access Point mode
+  wifiManager.setAPCallback(configModeCallback);
+
+  // Fetches ssid and pass and tries to connect
+  // If it does not connect it starts an access point with the specified name
+  // here "Wordclock"
+  // and goes into a blocking loop awaiting configuration
+  if (!wifiManager.autoConnect("Wordclock")) {
+    Serial.println("failed to connect and hit timeout");
+    // Reset and try again, or maybe put it to deep sleep
+    ESP.reset();
+    delay(1000);
+  }
+
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
-  // Read settings from EEPROM
-  en_es_ist = EEPROM.read(4);
-  en_uhr = EEPROM.read(5);
-  en_single_min = EEPROM.read(6);
+  // Execute this code only once to initialize default values
+  //  EEPROM.write(EEPROM_addr_min_brightness, 10); // Min brightness set by user
+  //  EEPROM.write(EEPROM_addr_LDR_min, 0); // Correspondig LDR value
+  //  EEPROM.write(EEPROM_addr_max_brightness, 50); // Max brightness set by user
+  //  EEPROM.write(EEPROM_addr_LDR_max, 255); // Correspondig LDR value
+  //  EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
+  //  EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
+  //  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
+  //  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
+  //  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
+  //  EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
+  //  EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
+  //  EEPROM.write(EEPROM_addr_R_clock, 150); // Value red LED clock, default: 0
+  //  EEPROM.write(EEPROM_addr_G_clock, 5); // Value green LED clock, default: 0
+  //  EEPROM.write(EEPROM_addr_B_clock, 5); // Value blue LED clock, default: 0
+  //  EEPROM.write(EEPROM_addr_R_ambilight, 150); // Value red LED ambilight, default: 0
+  //  EEPROM.write(EEPROM_addr_G_ambilight, 5); // Value green LED ambilight, default: 0
+  //  EEPROM.write(EEPROM_addr_B_ambilight, 5); // Value blue LED ambilight, default: 0
+  //  EEPROM.commit();
 
-  // Execute this code only once to initialize default brightness
-  //    EEPROM.write(0, 10); // Min brightness set by user
-  //    EEPROM.write(1, 0); // Correspondig LDR value
-  //    EEPROM.write(2, 50); // Max brightness set by user
-  //    EEPROM.write(3, 255); // Correspondig LDR value
-  //    EEPROM.write(4, 1); // "Es ist"
-  //    EEPROM.write(5, 1); // "Uhr"
-  //    EEPROM.write(6, 1); // Display singles minutes
-  //    EEPROM.commit();
+  // Read settings from EEPROM
+  min_user_brightness = EEPROM.read(EEPROM_addr_min_brightness);
+  max_user_brightness = EEPROM.read(EEPROM_addr_max_brightness);
+  min_LDR_value = EEPROM.read(EEPROM_addr_LDR_min);
+  max_LDR_value = EEPROM.read(EEPROM_addr_LDR_max);
+  en_es_ist = EEPROM.read(EEPROM_addr_es_ist);
+  en_uhr = EEPROM.read(EEPROM_addr_uhr);
+  en_single_min = EEPROM.read(EEPROM_addr_single_min);
+  en_ambilight = EEPROM.read(EEPROM_addr_ambilight);
+  language = EEPROM.read(EEPROM_addr_language);
+  t_night_1 = EEPROM.read(EEPROM_addr_t_night_1);
+  t_night_2 = EEPROM.read(EEPROM_addr_t_night_2);
+  R_clock = EEPROM.read(EEPROM_addr_R_clock);
+  G_clock = EEPROM.read(EEPROM_addr_G_clock);
+  B_clock = EEPROM.read(EEPROM_addr_B_clock);
+  R_ambilight = EEPROM.read(EEPROM_addr_R_ambilight);
+  G_ambilight = EEPROM.read(EEPROM_addr_G_ambilight);
+  B_ambilight = EEPROM.read(EEPROM_addr_B_ambilight);
 
   // Initialize maxtrix indices (cannot be done before setup)
   for (byte i = 0; i <= 9; i++) { // rows
     for (byte j = 0; j <= 10; j++) { // columns
       if (i % 2 == 0) { // even
-        LED_matrix[i][j] = row_offset[i] - j;
+        LED_matrix[i][j] = row_offset[i] + j;
       }
       else {
-        LED_matrix[i][j] = row_offset[i] + j;
+        LED_matrix[i][j] = row_offset[i] - j;
       }
     }
   }
 
   // HTML website for server
   webPage += "<font size=""7""><h1>Wordclock Web Server</h1></font>";
-  webPage += "<font size=""7""><p>Datum (Tag): <a href=\"day_of_month\"><button>Anzeigent</button></a></p></font>";
+  webPage += "<font size=""7""><p>Datum (Tag): <a href=\"day_of_month\"><button>Anzeigen</button></a></p></font>";
   webPage += "<font size=""7""><p>Sprache <a href=\"language_ger\"><button>Deutsch</button></a>&nbsp;<a href=\"language_en\"><button>Englisch</button></a></p></font>";
   webPage += "<font size=""7""><p>Aktuelle Temperatur: <a href=\"disp_temp\"><button>Anzeigen</button></a></p></font>";
   webPage += "<font size=""7""><p>'Uhr' anzeigen: <a href=\"uhr_on\"><button>Ein</button></a>&nbsp;<a href=\"uhr_off\"><button>Aus</button></a></p></font>";
@@ -186,21 +268,12 @@ void setup() {
   webPage += "<font size=""7""><p>LED Test: <a href=\"led_test\"><button>LED Test</button></a></p></font>";
   webPage += "<font size=""7""><p>Helligkeit: <a href=\"inc_brightness\"><button>Erhoehen</button></a>&nbsp;<a href=\"dec_brightness\"><button>Reduzieren</button></a></p></font>";
   webPage += "<font size=""7""><p>Kalibrieren: <a href=\"calib_bright\"><button>Heller Raum</button></a>&nbsp;<a href=\"calib_dark\"><button>Dunkler Raum</button></a></p></font>";
+  webPage += "<font size=""7""><p>Ambilight: <a href=\"ambilight_on\"><button>Ein</button></a>&nbsp;<a href=\"ambilight_off\"><button>Aus</button></a></p></font>";
+  webPage += "<font size=""7""><p>Nachtzeit: <a href=\"nighttime_on\"><button>Ein</button></a>&nbsp;<a href=\"nighttime_off\"><button>Aus</button></a></p></font>";
 
   pixels.begin(); // This initializes the NeoPixel library.
 
-  delay(250);
-  Serial.print("Connecting to ");
-  Serial.println(ssid);
-  WiFi.begin(ssid, pass);
-  //WiFi.config(ip, gateway, subnet);
-
-  while (WiFi.status() != WL_CONNECTED) {
-    delay(500);
-    Serial.print(".");
-  }
-
-  Serial.print("IP number for web server is ");
+  Serial.print("IP for web server is ");
   Serial.println(WiFi.localIP());
   Serial.println("Starting UDP");
   Udp.begin(localPort);
@@ -213,7 +286,8 @@ void setup() {
   // Todo: Test different sync intervals
   setSyncInterval(300);
 
-  if (mdns.begin("esp8266", WiFi.localIP())) {
+  // Connect to wordlock through wordclock.local
+  if (mdns.begin("wordclock", WiFi.localIP())) {
     Serial.println("MDNS responder started");
   }
 
@@ -236,19 +310,27 @@ void setup() {
     delay(1000);
   });
 
-  // Todo
   server.on("/language_ger", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Language: German");
-    //    settings_changed = true;
+    if (language) {
+      EEPROM.write(EEPROM_addr_language, 0);
+      EEPROM.commit();
+      language = false;
+      settings_changed = true;
+    }
     delay(1000);
   });
 
-  // Todo
   server.on("/language_en", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Language: English");
-    //    settings_changed = true;
+    if (!language) {
+      EEPROM.write(EEPROM_addr_language, 1);
+      EEPROM.commit();
+      language = true;
+      settings_changed = true;
+    }
     delay(1000);
   });
 
@@ -256,7 +338,8 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display 'Uhr': on");
     if (!en_uhr) {
-      EEPROM.write(5, 1);
+      EEPROM.write(EEPROM_addr_uhr, 1);
+      EEPROM.commit();
       en_uhr = true;
       settings_changed = true;
     }
@@ -267,7 +350,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display 'Uhr': on");
     if (en_uhr) {
-      EEPROM.write(5, 0);
+      EEPROM.write(EEPROM_addr_uhr, 0);
       EEPROM.commit();
       en_uhr = false;
       settings_changed = true;
@@ -279,7 +362,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display 'Es ist': on");
     if (!en_es_ist) {
-      EEPROM.write(4, 1);
+      EEPROM.write(EEPROM_addr_es_ist, 1);
       EEPROM.commit();
       en_es_ist = true;
       settings_changed = true;
@@ -291,7 +374,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display 'Es ist': off");
     if (en_es_ist) {
-      EEPROM.write(4, 0);
+      EEPROM.write(EEPROM_addr_es_ist, 0);
       EEPROM.commit();
       en_es_ist = false;
       settings_changed = true;
@@ -303,7 +386,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display single minute LEDs: on");
     if (!en_single_min) {
-      EEPROM.write(6, 1);
+      EEPROM.write(EEPROM_addr_single_min, 1);
       EEPROM.commit();
       en_single_min = true;
       settings_changed = true;
@@ -315,7 +398,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.println("Display single minute LEDs: off");
     if (en_single_min) {
-      EEPROM.write(6, 0);
+      EEPROM.write(EEPROM_addr_single_min, 0);
       EEPROM.commit();
       en_single_min = false;
       settings_changed = true;
@@ -331,6 +414,7 @@ void setup() {
     delay(1000);
   });
 
+  // TODO: brightness has no effect at the moment
   server.on("/inc_brightness", []() {
     server.send(200, "text/html", webPage);
     Serial.print("Increasing LED brightness to ");
@@ -342,6 +426,7 @@ void setup() {
     delay(1000);
   });
 
+  // TODO: brightness has no effect at the moment
   server.on("/dec_brightness", []() {
     server.send(200, "text/html", webPage);
     Serial.print("Decreasing LED brightness to ");
@@ -369,10 +454,54 @@ void setup() {
     delay(1000);
   });
 
+  server.on("/ambilight_on", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Enable ambilight");
+    if (!en_ambilight) {
+      EEPROM.write(EEPROM_addr_ambilight, 1);
+      EEPROM.commit();
+      en_ambilight = true;
+      ambilight();
+    }
+    delay(1000);
+  });
+
+  server.on("/ambilight_off", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Disable ambilight");
+    if (en_ambilight) {
+      EEPROM.write(EEPROM_addr_ambilight, 0);
+      EEPROM.commit();
+      en_ambilight = false;
+      disable_ambilight();
+    }
+    delay(1000);
+  });
+
+  server.on("/nighttime_on", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Enable nighttime");
+    if (!en_nighttime) {
+      en_nighttime = 1;
+      settings_changed = true;
+    }
+    delay(1000);
+  });
+
+  server.on("/nighttime_off", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Disable nighttime");
+    if (en_nighttime) {
+      en_nighttime = 0;
+      settings_changed = true;
+    }
+    delay(1000);
+  });
+
   server.begin();
   Serial.println("HTTP server started");
 
-  getWeatherData();
+  // getWeatherData();
   //  get_brightness();
 
 }
@@ -387,21 +516,34 @@ byte temp_max_index = 0;
 ////////////////////////////////////////////////////
 void loop() {
 
+  // Handle Webserver
   server.handleClient();
 
-  // Update everything only if minutes or settings have changed
+  // Execute everything only if minutes or settings have changed
   if (timeStatus() != timeNotSet) {
-    if (minute() != prevDisplay || settings_changed) { // Alternative: now()
+    if ((minute() != prevDisplay || settings_changed)) { // Alternative: now()
 
-      // Determine LED brightness based on LDR measurement
-      get_brightness();
+      // Check whether nighttime is active
+      if (!nighttime()) {
 
-      // Determine and display time
-      clock_display(); // Real clock
-      serial_clock_display(); // Serial port
+        // Determine LED brightness based on LDR measurement
+        //get_brightness();
+
+        if (en_ambilight) 
+          ambilight();
+        else 
+          disable_ambilight();
+
+        // Determine and display time
+        clock_display(); // Real clock
+        serial_clock_display(); // Serial port
+      }
+      else      
+        disable_all_led();
 
       prevDisplay = minute();
       settings_changed = false;
+
     }
   }
 }
@@ -411,102 +553,184 @@ void loop() {
 ////////////////////////////////////////////////////
 void clock_display() {
 
-  // All LED off
-  disable_all_led();
+  // All clock LED off
+  disable_clock_led();
 
-  // NTP time
+  // Get NTP time
   minutes = minute();
   hours = hour();
 
   // Single minutes
   single_min = minutes % 5;
-  if (single_min > 0 && en_single_min) {
+  if (single_min > 0 && en_single_min) 
     send_time_2_LED(single_mins[single_min - 1]);
-  }
 
   // Five minutes
-  five_min = minutes - single_min;
+  min_five = minutes - single_min;
 
   // Hours
-  if (hours == 12) {
+  if (hours == 12) 
     hours = 12;
-  }
-  else {
-    hours = hours % 12;
-  }
+  else 
+    hours = hours % 12; // hours modulo 12
 
-  // Display time
-  if (en_es_ist) {
-    send_time_2_LED(es_ist);
-  }
+  // Hier zwischen Sprachen wechseln
+  switch (language) {
 
-  switch (five_min) {
+    // German
     case 0:
-      send_time_2_LED(full_hours_disp[hours]);
-      if (en_uhr) send_time_2_LED(uhr);
+
+      // Display "es ist"
+      if (en_es_ist) 
+        send_time_2_LED(es_ist);      
+
+      switch (min_five) {
+        case 0:
+          send_time_2_LED(full_hours_GER[hours]);
+          if (en_uhr) send_time_2_LED(uhr);
+          break;
+        case 5:
+          send_time_2_LED(fuenf_min);
+          send_time_2_LED(nach);
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 10:
+          send_time_2_LED(zehn_min);
+          send_time_2_LED(nach);
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 15:
+          send_time_2_LED(viertel_min);
+          send_time_2_LED(nach);
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 20:
+          send_time_2_LED(zwanzig_min);
+          send_time_2_LED(nach);
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 25:
+          send_time_2_LED(fuenf_min);
+          send_time_2_LED(vor);
+          send_time_2_LED(halb);
+          hours++;
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 30:
+          send_time_2_LED(halb);
+          hours++;
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 35:
+          send_time_2_LED(fuenf_min);
+          send_time_2_LED(nach);
+          send_time_2_LED(halb);
+          hours++;
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 40:
+          send_time_2_LED(zwanzig_min);
+          send_time_2_LED(vor);
+          hours++;
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 45:
+          send_time_2_LED(viertel_min);
+          send_time_2_LED(vor);
+          hours++;
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 50:
+          send_time_2_LED(zehn_min);
+          send_time_2_LED(vor);
+          hours++;
+          send_time_2_LED(hours_GER[hours]);
+          break;
+        case 55:
+          send_time_2_LED(fuenf_min);
+          send_time_2_LED(vor);
+          hours++;
+          send_time_2_LED(hours_GER[hours]);
+          break;
+      }
+
       break;
-    case 5:
-      send_time_2_LED(fuenf_min);
-      send_time_2_LED(nach);
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 10:
-      send_time_2_LED(zehn_min);
-      send_time_2_LED(nach);
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 15:
-      send_time_2_LED(viertel_min);
-      send_time_2_LED(nach);
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 20:
-      send_time_2_LED(zwanzig_min);
-      send_time_2_LED(nach);
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 25:
-      send_time_2_LED(fuenf_min);
-      send_time_2_LED(vor);
-      send_time_2_LED(halb);
-      hours++;
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 30:
-      send_time_2_LED(halb);
-      hours++;
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 35:
-      send_time_2_LED(fuenf_min);
-      send_time_2_LED(nach);
-      send_time_2_LED(halb);
-      hours++;
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 40:
-      send_time_2_LED(zwanzig_min);
-      send_time_2_LED(vor);
-      hours++;
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 45:
-      send_time_2_LED(viertel_min);
-      send_time_2_LED(vor);
-      hours++;
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 50:
-      send_time_2_LED(zehn_min);
-      send_time_2_LED(vor);
-      hours++;
-      send_time_2_LED(hours_disp[hours]);
-      break;
-    case 55:
-      send_time_2_LED(fuenf_min);
-      send_time_2_LED(vor);
-      hours++;
-      send_time_2_LED(hours_disp[hours]);
+
+    // English
+    case 1:
+
+      // Display "it is"
+      if (en_es_ist) 
+        send_time_2_LED(it_is);
+
+      switch (min_five) {
+        case 0:
+          send_time_2_LED(hours_EN[hours]);
+          if (en_uhr) send_time_2_LED(oclock);
+          break;
+        case 5:
+          send_time_2_LED(five_min);
+          send_time_2_LED(past);
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 10:
+          send_time_2_LED(ten_min);
+          send_time_2_LED(past);
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 15:
+          send_time_2_LED(quarter_min);
+          send_time_2_LED(past);
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 20:
+          send_time_2_LED(twenty_min);
+          send_time_2_LED(past);
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 25:
+          send_time_2_LED(twenty_min);
+          send_time_2_LED(five_min);
+          send_time_2_LED(past);
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 30:
+          send_time_2_LED(half);
+          send_time_2_LED(past);
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 35:
+          send_time_2_LED(twenty_min);
+          send_time_2_LED(five_min);
+          send_time_2_LED(to);
+          hours++;
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 40:
+          send_time_2_LED(twenty_min);
+          send_time_2_LED(to);
+          hours++;
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 45:
+          send_time_2_LED(quarter_min);
+          send_time_2_LED(to);
+          hours++;
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 50:
+          send_time_2_LED(ten_min);
+          send_time_2_LED(to);
+          hours++;
+          send_time_2_LED(hours_EN[hours]);
+          break;
+        case 55:
+          send_time_2_LED(five_min);
+          send_time_2_LED(to);
+          hours++;
+          send_time_2_LED(hours_EN[hours]);
+          break;
+      }
       break;
   }
 
@@ -516,36 +740,70 @@ void clock_display() {
 ////////////////////////////////////////////////////
 // Send data to LEDs
 ////////////////////////////////////////////////////
-// Todo: Set Color & brightness
-// Use only one display function with variable array sizes if possible
+// TODO: Brightness
 void send_time_2_LED(byte x[]) {
   for (byte i = 0; i <= 6; i++) {
-    if (x[i] != 0) {
-      pixels.setPixelColor(x[i] - 1, pixels.Color(brightness, brightness, brightness));
-    }
+    if (x[i] != 0) 
+      pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
   }
 }
 
 ////////////////////////////////////////////////////
 // Display numbers
 ////////////////////////////////////////////////////
-// Todo: Set Color & brightness
+// Todo: Brightness
 void send_num_2_LED(byte x[]) {
   for (byte i = 0; i <= 16; i++) {
-    if (x[i] != 0) {
-      pixels.setPixelColor(x[i] - 1, pixels.Color(brightness, brightness, brightness));
-    }
+    if (x[i] != 0) 
+      pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
   }
+}
+
+////////////////////////////////////////////////////
+// Disable clock LEDs
+////////////////////////////////////////////////////
+void disable_clock_led() {
+  for (byte i = 0; i <= 114; i++) {
+    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+  }
+}
+
+////////////////////////////////////////////////////
+// Enable ambilight LEDs
+////////////////////////////////////////////////////
+void ambilight() {
+  // Fade colors
+  //if(led == 49) { led = 0; ambimode++; } else { led++; }
+  //if(ambimode == 25) { ambimode = 0; }
+  //pixels.setPixelColor(led + 114, pixels.Color(255-(10 * ambimode), 10 * ambimode, 255-(10 * ambimode)));
+
+  // Static color
+  for (byte i = 114; i <= 170; i++) {
+    pixels.setPixelColor(i - 1, pixels.Color(R_ambilight, G_ambilight, B_ambilight));
+  }
+  pixels.show();
+
+}
+
+////////////////////////////////////////////////////
+// Disable ambilight LEDs
+////////////////////////////////////////////////////
+void disable_ambilight() {
+  for (byte i = 115; i < 255; i++) {
+    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
+  }
+  pixels.show();
+  
 }
 
 ////////////////////////////////////////////////////
 // Disable all LEDs
 ////////////////////////////////////////////////////
-// Todo: Not very elegant
 void disable_all_led() {
   for (byte i = 0; i < 255; i++) {
     pixels.setPixelColor(i, pixels.Color(0, 0, 0));
   }
+  pixels.show();
 }
 
 ////////////////////////////////////////////////////
@@ -553,6 +811,10 @@ void disable_all_led() {
 ////////////////////////////////////////////////////
 void serial_clock_display()
 {
+  // IP for webserver access
+  // Serial.print("IP for web server is ");
+  // Serial.println(WiFi.localIP());
+
   // digital clock display of the time
   Serial.print("Current time and date: ");
   Serial.print(hour());
@@ -571,7 +833,7 @@ void serial_clock_display()
 }
 
 ////////////////////////////////////////////////////
-// utility for digital clock display: prints preceding colon and leading 0
+// Utility for digital clock display: prints preceding colon and leading 0
 ////////////////////////////////////////////////////
 void printDigits(int digits)
 {
@@ -579,6 +841,42 @@ void printDigits(int digits)
   if (digits < 10)
     Serial.print('0');
   Serial.print(digits);
+}
+
+////////////////////////////////////////////////////
+// Check whether the specfied nighttime is active
+// If t_night_1 = t_night_2, then false is always returned
+// Nighttime can only be disabled locally, i.e. during the current night
+// By default it is always enabled
+////////////////////////////////////////////////////
+boolean nighttime() {
+
+  // If nighttime is enabled
+  if (en_nighttime) {
+    if (t_night_1 == t_night_2) 
+      return false;
+    // t_1 before mignight, t_2 after midnight
+    else if (t_night_1 > t_night_2) {
+      if (hour() >= t_night_1 || hour() < t_night_2)  
+        return true;
+      else {
+        en_nighttime = 1; // Enable nighttime again during the day
+        return false;
+      }
+    }
+    // t_1 and t_2 after midnight
+    else if (t_night_1 < t_night_2) {
+      if (hour() >= t_night_1 && hour() < t_night_2)  
+        return true;
+      else {
+        en_nighttime = 1; // Enable nighttime again during the day
+        return false;
+      }
+    }
+  }
+  else
+    return false;
+    
 }
 
 ////////////////////////////////////////////////////
@@ -591,21 +889,17 @@ void setSummerTime() {
     switch (month()) {
       // March
       case 3:
-        if (day() > 31 - (7 - weekday())) {
+        if (day() > 31 - (7 - weekday())) 
           summertime = 1;
-        }
-        else {
+        else 
           summertime = 0;
-        }
         break;
       // October
       case 10:
-        if (day() > 31 - (7 - weekday())) {
+        if (day() > 31 - (7 - weekday())) 
           summertime = 0;
-        }
-        else {
+        else
           summertime = 1;
-        }
         break;
       default:
         summertime = 1;
@@ -614,6 +908,16 @@ void setSummerTime() {
   else {
     summertime = 0;
   }
+}
+
+////////////////////////////////////////////////////
+// Wifimanager
+////////////////////////////////////////////////////
+void configModeCallback (WiFiManager *myWiFiManager) {
+  Serial.println("Entered config mode");
+  Serial.println(WiFi.softAPIP());
+  //if you used auto generated SSID, print it
+  Serial.println(myWiFiManager->getConfigPortalSSID());
 }
 
 ////////////////////////////////////////////////////
@@ -680,15 +984,16 @@ void sendNTPpacket(IPAddress & address)
 
 ////////////////////////////////////////////////////
 // Check if all LEDs are working properly
+// Sweep through rows, each time with different color
 ////////////////////////////////////////////////////
 void LED_test() {
 
-  byte test_brightness = 100;
+  byte test_brightness = 150;
 
   for (byte n = 0; n <= 3; n++) { // 3 times
     for (byte i = 0; i <= 9; i++) { // rows
 
-      disable_all_led();
+      disable_clock_led();
 
       for (byte j = 0; j <= 10; j++) { // columns
         switch (n) {
@@ -718,34 +1023,32 @@ void LED_test() {
 ////////////////////////////////////////////////////
 void show_day() {
 
-  disable_all_led();
+  disable_clock_led();
 
   byte day_left = (day() - day() % 10) / 10;
   byte day_right = day() % 10;
   send_num_2_LED(numbers_left[day_left]);
   send_num_2_LED(numbers_right[day_right]);
 
-  pixels.show(); // This sends the updated pixel color to the hardware.
+  pixels.show();
   delay(2000);
 
 }
 
 ////////////////////////////////////////////////////
-// Increase brightness locally
+// Determine brightness based on sensor data and limits
 ////////////////////////////////////////////////////
+// TODO: Helligkeit ist noch nicht mit eingebaut
+// Bisher nur default-Farbe, die Helligkeitsskalierung ist nicht enthalten
 void get_brightness() {
 
   // Read LDR
   int sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023
 
-  int min_user_brightness = EEPROM.read(0);
-  int max_user_brightness = EEPROM.read(2);
-  if (min_user_brightness > max_user_brightness) {
+  if (min_user_brightness > max_user_brightness)
     max_user_brightness = min_user_brightness;
-  }
-  int min_sensor_value = EEPROM.read(1);
-  int max_sensor_value = EEPROM.read(3);
-  brightness = map(sensorValue, min_sensor_value, max_sensor_value, min_user_brightness, max_user_brightness);
+
+  brightness = map(sensorValue, min_LDR_value, max_LDR_value, min_user_brightness, max_user_brightness);
   brightness = constrain(brightness, min_brightness, max_brightness);
 
   // Print sensor value to serial monitor
@@ -763,8 +1066,8 @@ void set_min_brightness() {
 
   // Read the analog in value
   byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023/4
-  EEPROM.write(0, brightness); // Min brightness set by user
-  EEPROM.write(2, sensorValue); // Correspondig LDR value
+  EEPROM.write(EEPROM_addr_min_brightness, brightness); // Min brightness set by user
+  EEPROM.write(EEPROM_addr_LDR_min, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
 }
@@ -776,22 +1079,26 @@ void set_max_brightness() {
 
   // Read the analog in value
   byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023
-  EEPROM.write(1, brightness); // Max brightness set by user
-  EEPROM.write(3, sensorValue); // Correspondig LDR value
+  EEPROM.write(EEPROM_addr_max_brightness, brightness); // Max brightness set by user
+  EEPROM.write(EEPROM_addr_LDR_max, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
 }
 
-//  // Test numbers
-//  for(byte i = 0; i <= 5; i++) {
-//    for(byte j = 0; j <= 9; j++) {
-//      disable_all_led();
-//      send_num_2_LED(numbers_left[j]);
-//      send_num_2_LED(numbers_right[j]);
-//      pixels.show(); // This sends the updated pixel color to the hardware.
-//      delay(5000);
-//    }
-//  }
+////////////////////////////////////////////////////
+// Test numbers
+////////////////////////////////////////////////////
+void test_numbers() {
+  for (byte i = 0; i <= 5; i++) {
+    for (byte j = 0; j <= 9; j++) {
+      disable_clock_led();
+      send_num_2_LED(numbers_left[j]);
+      send_num_2_LED(numbers_right[j]);
+      pixels.show(); // This sends the updated pixel color to the hardware.
+      delay(500);
+    }
+  }
+}
 
 //  //  read temperature from somewhere
 //  //  % Determine conservative temperature, quantisation: 3°C
