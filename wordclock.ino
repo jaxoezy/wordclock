@@ -9,6 +9,9 @@
 #include <ArduinoJson.h>
 #include <DNSServer.h>
 #include <WiFiManager.h>
+#include <RGBConverter.h>
+
+extern const uint8_t gamma8[];
 
 // Weather forecast Wunderground
 const char weather_host[] = "api.wunderground.com";
@@ -20,10 +23,10 @@ const char APIKEY[] = ""; // Wunderground API key
 #define PIN D1 // LED data pin
 const int analogInPin = A0;  // Analog input pin that the potentiometer is attached to
 
-byte brightness = 255; //
-byte min_brightness = 5;
-byte max_brightness = 255;
-byte brightness_inc = 10;
+RGBConverter rgb_conv;
+byte clock_rgb[3];
+byte ambilight_rgb[3];
+double hsv_value_inc = 0.1;
 
 // Initialize LEDs
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(256, PIN, NEO_GRB + NEO_KHZ800);
@@ -141,8 +144,8 @@ byte minutes = 0;
 byte min_five = 0;
 byte single_min = 0;
 
-byte min_user_brightness;
-byte max_user_brightness;
+double min_user_brightness;
+double max_user_brightness;
 byte min_LDR_value;
 byte max_LDR_value;
 byte en_es_ist;
@@ -154,12 +157,12 @@ int language;
 byte en_nighttime = 1;
 byte t_night_1;
 byte t_night_2;
-byte R_clock;
-byte G_clock;
-byte B_clock;
-byte R_ambilight;
-byte G_ambilight;
-byte B_ambilight;
+double h_clock;
+double s_clock;
+double v_clock;
+double h_ambilight;
+double s_ambilight;
+double v_ambilight;
 
 // EEPROM address assignment
 const int EEPROM_addr_min_brightness = 0;
@@ -173,12 +176,12 @@ const int EEPROM_addr_ambilight = 7;
 const int EEPROM_addr_language = 8;
 const int EEPROM_addr_t_night_1 = 9;
 const int EEPROM_addr_t_night_2 = 10;
-const int EEPROM_addr_R_clock = 11;
-const int EEPROM_addr_G_clock = 12;
-const int EEPROM_addr_B_clock = 13;
-const int EEPROM_addr_R_ambilight = 14;
-const int EEPROM_addr_G_ambilight = 15;
-const int EEPROM_addr_B_ambilight = 16;
+const int EEPROM_addr_h_clock = 11;
+const int EEPROM_addr_s_clock = 12;
+const int EEPROM_addr_v_clock = 13;
+const int EEPROM_addr_h_ambilight = 14;
+const int EEPROM_addr_s_ambilight = 15;
+const int EEPROM_addr_v_ambilight = 16;
 
 ////////////////////////////////////////////////////
 // Setup routine
@@ -207,28 +210,30 @@ void setup() {
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
   // Execute this code only once to initialize default values
-  //  EEPROM.write(EEPROM_addr_min_brightness, 10); // Min brightness set by user
-  //  EEPROM.write(EEPROM_addr_LDR_min, 0); // Correspondig LDR value
-  //  EEPROM.write(EEPROM_addr_max_brightness, 50); // Max brightness set by user
-  //  EEPROM.write(EEPROM_addr_LDR_max, 255); // Correspondig LDR value
-  //  EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
-  //  EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
-  //  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
-  //  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
-  //  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
-  //  EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
-  //  EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
-  //  EEPROM.write(EEPROM_addr_R_clock, 150); // Value red LED clock, default: 0
-  //  EEPROM.write(EEPROM_addr_G_clock, 5); // Value green LED clock, default: 0
-  //  EEPROM.write(EEPROM_addr_B_clock, 5); // Value blue LED clock, default: 0
-  //  EEPROM.write(EEPROM_addr_R_ambilight, 150); // Value red LED ambilight, default: 0
-  //  EEPROM.write(EEPROM_addr_G_ambilight, 5); // Value green LED ambilight, default: 0
-  //  EEPROM.write(EEPROM_addr_B_ambilight, 5); // Value blue LED ambilight, default: 0
-  //  EEPROM.commit();
+//    EEPROM.write(EEPROM_addr_min_brightness, 10); // Min brightness set by user
+//    EEPROM.write(EEPROM_addr_LDR_min, 0); // Correspondig LDR value
+//    EEPROM.write(EEPROM_addr_max_brightness, 80); // Max brightness set by user
+//    EEPROM.write(EEPROM_addr_LDR_max, 255); // Correspondig LDR value
+//    EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
+//    EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
+//    EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
+//    EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
+//    EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
+//    EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
+//    EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
+//    EEPROM.write(EEPROM_addr_h_clock, 0); // Hue LED clock, default: 0
+//    EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
+//    EEPROM.write(EEPROM_addr_v_clock, 70); // Value LED clock, default: 0
+//    EEPROM.write(EEPROM_addr_h_ambilight, 0); // Hue LED ambilight, default: 0
+//    EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
+//    EEPROM.write(EEPROM_addr_v_ambilight, 70); // Value LED ambilight, default: 0
+//    EEPROM.commit();
 
   // Read settings from EEPROM
-  min_user_brightness = EEPROM.read(EEPROM_addr_min_brightness);
-  max_user_brightness = EEPROM.read(EEPROM_addr_max_brightness);
+  min_user_brightness = EEPROM.read(EEPROM_addr_min_brightness)/100;
+  max_user_brightness = EEPROM.read(EEPROM_addr_max_brightness)/100;
+  min_user_brightness = constrain(min_user_brightness,0,1);
+  max_user_brightness = constrain(max_user_brightness,0,1);
   min_LDR_value = EEPROM.read(EEPROM_addr_LDR_min);
   max_LDR_value = EEPROM.read(EEPROM_addr_LDR_max);
   en_es_ist = EEPROM.read(EEPROM_addr_es_ist);
@@ -238,12 +243,22 @@ void setup() {
   language = EEPROM.read(EEPROM_addr_language);
   t_night_1 = EEPROM.read(EEPROM_addr_t_night_1);
   t_night_2 = EEPROM.read(EEPROM_addr_t_night_2);
-  R_clock = EEPROM.read(EEPROM_addr_R_clock);
-  G_clock = EEPROM.read(EEPROM_addr_G_clock);
-  B_clock = EEPROM.read(EEPROM_addr_B_clock);
-  R_ambilight = EEPROM.read(EEPROM_addr_R_ambilight);
-  G_ambilight = EEPROM.read(EEPROM_addr_G_ambilight);
-  B_ambilight = EEPROM.read(EEPROM_addr_B_ambilight);
+  h_clock = (double) EEPROM.read(EEPROM_addr_h_clock)/100; // Must be in range [0..1]  
+  s_clock = (double) EEPROM.read(EEPROM_addr_s_clock)/100; // Must be in range [0..1]
+  v_clock = (double) EEPROM.read(EEPROM_addr_v_clock)/100; // Must be in range [0..1]
+  h_clock = constrain(h_clock,0,1);
+  s_clock = constrain(s_clock,0,1);
+  v_clock = constrain(v_clock,0,1);
+  h_ambilight = (double) EEPROM.read(EEPROM_addr_h_ambilight)/100; // Must be in range [0..1]
+  s_ambilight = (double) EEPROM.read(EEPROM_addr_s_ambilight)/100; // Must be in range [0..1]
+  v_ambilight = (double) EEPROM.read(EEPROM_addr_v_ambilight)/100; // Must be in range [0..1]
+  h_ambilight = constrain(h_ambilight,0,1);
+  s_ambilight = constrain(s_ambilight,0,1);
+  v_ambilight = constrain(v_ambilight,0,1);
+
+  // Convert HSV to RGB
+  rgb_conv.hsvToRgb(h_clock,s_clock,v_clock,clock_rgb);
+  rgb_conv.hsvToRgb(h_ambilight,s_ambilight,v_ambilight,ambilight_rgb);
 
   // Initialize maxtrix indices (cannot be done before setup)
   for (byte i = 0; i <= 9; i++) { // rows
@@ -414,25 +429,31 @@ void setup() {
     delay(1000);
   });
 
-  // TODO: brightness has no effect at the moment
   server.on("/inc_brightness", []() {
     server.send(200, "text/html", webPage);
     Serial.print("Increasing LED brightness to ");
-    brightness += brightness_inc;
-    brightness = constrain(brightness, min_brightness, max_brightness);
-    Serial.print(brightness);
+    v_clock += hsv_value_inc;   
+    v_clock = constrain(v_clock, min_user_brightness, max_user_brightness);
+    v_ambilight = v_clock;
+    // Convert to RGB
+    rgb_conv.hsvToRgb(h_clock,s_clock,v_clock,clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight,s_ambilight,v_ambilight,ambilight_rgb);
+    Serial.print(v_clock);
     Serial.println("");
     settings_changed = true;
     delay(1000);
   });
 
-  // TODO: brightness has no effect at the moment
   server.on("/dec_brightness", []() {
     server.send(200, "text/html", webPage);
     Serial.print("Decreasing LED brightness to ");
-    brightness -= brightness_inc;
-    brightness = constrain(brightness, min_brightness, max_brightness);
-    Serial.print(brightness);
+    v_clock -= hsv_value_inc;   
+    v_clock = constrain(v_clock, min_user_brightness, max_user_brightness);
+    v_ambilight = v_clock;
+    // Convert to RGB
+    rgb_conv.hsvToRgb(h_clock,s_clock,v_clock,clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight,s_ambilight,v_ambilight,ambilight_rgb);
+    Serial.print(v_clock);
     Serial.println("");
     settings_changed = true;
     delay(1000);
@@ -740,22 +761,36 @@ void clock_display() {
 ////////////////////////////////////////////////////
 // Send data to LEDs
 ////////////////////////////////////////////////////
-// TODO: Brightness
 void send_time_2_LED(byte x[]) {
+//Serial.print("LED color: R: ");
+//Serial.print(pgm_read_byte(&gamma8[clock_rgb[0]]));
+//Serial.print(", G: ");
+//Serial.print(pgm_read_byte(&gamma8[clock_rgb[1]]));
+//Serial.print(", B: ");
+//Serial.println(pgm_read_byte(&gamma8[clock_rgb[2]]));
+//
+//Serial.print("LED color: H: ");
+//Serial.print(h_clock);
+//Serial.print(", S: ");
+//Serial.print(s_clock);
+//Serial.print(", V: ");
+//Serial.println(v_clock);
+
   for (byte i = 0; i <= 6; i++) {
     if (x[i] != 0) 
-      pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
+      // pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
+      pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
   }
 }
 
 ////////////////////////////////////////////////////
 // Display numbers
 ////////////////////////////////////////////////////
-// Todo: Brightness
 void send_num_2_LED(byte x[]) {
   for (byte i = 0; i <= 16; i++) {
     if (x[i] != 0) 
-      pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
+      // pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
+      pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
   }
 }
 
@@ -779,7 +814,8 @@ void ambilight() {
 
   // Static color
   for (byte i = 114; i <= 170; i++) {
-    pixels.setPixelColor(i - 1, pixels.Color(R_ambilight, G_ambilight, B_ambilight));
+    // pixels.setPixelColor(i - 1, pixels.Color(R_ambilight, G_ambilight, B_ambilight));
+    pixels.setPixelColor(i - 1, pgm_read_byte(&gamma8[ambilight_rgb[0]]), pgm_read_byte(&gamma8[ambilight_rgb[1]]), pgm_read_byte(&gamma8[ambilight_rgb[2]]));
   }
   pixels.show();
 
@@ -1048,15 +1084,16 @@ void get_brightness() {
   if (min_user_brightness > max_user_brightness)
     max_user_brightness = min_user_brightness;
 
-  brightness = map(sensorValue, min_LDR_value, max_LDR_value, min_user_brightness, max_user_brightness);
-  brightness = constrain(brightness, min_brightness, max_brightness);
+  v_clock = map(sensorValue, min_LDR_value, max_LDR_value, min_user_brightness, max_user_brightness);
+  v_clock = constrain(v_clock, min_user_brightness, max_user_brightness);
+  v_ambilight = v_clock;
 
   // Print sensor value to serial monitor
   Serial.print("Sensor value: ");
   Serial.print(sensorValue);
   Serial.print("/255, Brightness: ");
-  Serial.print(brightness);
-  Serial.println("/255");
+  Serial.print(v_clock);
+  Serial.println("/1");
 }
 
 ////////////////////////////////////////////////////
@@ -1066,7 +1103,7 @@ void set_min_brightness() {
 
   // Read the analog in value
   byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023/4
-  EEPROM.write(EEPROM_addr_min_brightness, brightness); // Min brightness set by user
+  EEPROM.write(EEPROM_addr_min_brightness, v_clock*100); // Min brightness set by user
   EEPROM.write(EEPROM_addr_LDR_min, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
@@ -1079,7 +1116,7 @@ void set_max_brightness() {
 
   // Read the analog in value
   byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023
-  EEPROM.write(EEPROM_addr_max_brightness, brightness); // Max brightness set by user
+  EEPROM.write(EEPROM_addr_max_brightness, v_clock*100); // Max brightness set by user
   EEPROM.write(EEPROM_addr_LDR_max, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
@@ -1319,3 +1356,21 @@ void getWeatherData()
   //Serial.println("Weather:");
 
 }
+
+const uint8_t PROGMEM gamma8[] = {
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
+    1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
+    2,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  5,  5,  5,
+    5,  6,  6,  6,  6,  7,  7,  7,  7,  8,  8,  8,  9,  9,  9, 10,
+   10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16,
+   17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25,
+   25, 26, 27, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36,
+   37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 50,
+   51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68,
+   69, 70, 72, 73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89,
+   90, 92, 93, 95, 96, 98, 99,101,102,104,105,107,109,110,112,114,
+  115,117,119,120,122,124,126,127,129,131,133,135,137,138,140,142,
+  144,146,148,150,152,154,156,158,160,162,164,167,169,171,173,175,
+  177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
+  215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
