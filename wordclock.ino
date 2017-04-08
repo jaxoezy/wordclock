@@ -210,30 +210,30 @@ void setup() {
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
   // Execute this code only once to initialize default values
-//    EEPROM.write(EEPROM_addr_min_brightness, 10); // Min brightness set by user
-//    EEPROM.write(EEPROM_addr_LDR_min, 0); // Correspondig LDR value
-//    EEPROM.write(EEPROM_addr_max_brightness, 80); // Max brightness set by user
-//    EEPROM.write(EEPROM_addr_LDR_max, 255); // Correspondig LDR value
-//    EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
-//    EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
-//    EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
-//    EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
-//    EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
-//    EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
-//    EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
-//    EEPROM.write(EEPROM_addr_h_clock, 0); // Hue LED clock, default: 0
-//    EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
-//    EEPROM.write(EEPROM_addr_v_clock, 70); // Value LED clock, default: 0
-//    EEPROM.write(EEPROM_addr_h_ambilight, 0); // Hue LED ambilight, default: 0
-//    EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
-//    EEPROM.write(EEPROM_addr_v_ambilight, 70); // Value LED ambilight, default: 0
-//    EEPROM.commit();
+  //    EEPROM.write(EEPROM_addr_min_brightness, 10); // Min brightness set by user
+  //    EEPROM.write(EEPROM_addr_LDR_min, 0); // Correspondig LDR value
+  //    EEPROM.write(EEPROM_addr_max_brightness, 80); // Max brightness set by user
+  //    EEPROM.write(EEPROM_addr_LDR_max, 255); // Correspondig LDR value
+  //    EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
+  //    EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
+  //    EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
+  //    EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
+  //    EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
+  //    EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
+  //    EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
+  //    EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
+  //    EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
+  //    EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
+  //    EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
+  //    EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
+  //    EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
+  //    EEPROM.commit();
 
   // Read settings from EEPROM
-  min_user_brightness = EEPROM.read(EEPROM_addr_min_brightness)/100;
-  max_user_brightness = EEPROM.read(EEPROM_addr_max_brightness)/100;
-  min_user_brightness = constrain(min_user_brightness,0,1);
-  max_user_brightness = constrain(max_user_brightness,0,1);
+  min_user_brightness = EEPROM.read(EEPROM_addr_min_brightness) / 100;
+  max_user_brightness = EEPROM.read(EEPROM_addr_max_brightness) / 100;
+  min_user_brightness = constrain(min_user_brightness, 0, 1);
+  max_user_brightness = constrain(max_user_brightness, 0, 1);
   min_LDR_value = EEPROM.read(EEPROM_addr_LDR_min);
   max_LDR_value = EEPROM.read(EEPROM_addr_LDR_max);
   en_es_ist = EEPROM.read(EEPROM_addr_es_ist);
@@ -243,22 +243,22 @@ void setup() {
   language = EEPROM.read(EEPROM_addr_language);
   t_night_1 = EEPROM.read(EEPROM_addr_t_night_1);
   t_night_2 = EEPROM.read(EEPROM_addr_t_night_2);
-  h_clock = (double) EEPROM.read(EEPROM_addr_h_clock)/100; // Must be in range [0..1]  
-  s_clock = (double) EEPROM.read(EEPROM_addr_s_clock)/100; // Must be in range [0..1]
-  v_clock = (double) EEPROM.read(EEPROM_addr_v_clock)/100; // Must be in range [0..1]
-  h_clock = constrain(h_clock,0,1);
-  s_clock = constrain(s_clock,0,1);
-  v_clock = constrain(v_clock,0,1);
-  h_ambilight = (double) EEPROM.read(EEPROM_addr_h_ambilight)/100; // Must be in range [0..1]
-  s_ambilight = (double) EEPROM.read(EEPROM_addr_s_ambilight)/100; // Must be in range [0..1]
-  v_ambilight = (double) EEPROM.read(EEPROM_addr_v_ambilight)/100; // Must be in range [0..1]
-  h_ambilight = constrain(h_ambilight,0,1);
-  s_ambilight = constrain(s_ambilight,0,1);
-  v_ambilight = constrain(v_ambilight,0,1);
+  h_clock = (double) EEPROM.read(EEPROM_addr_h_clock) / 100; // Must be in range [0..1]
+  s_clock = (double) EEPROM.read(EEPROM_addr_s_clock) / 100; // Must be in range [0..1]
+  v_clock = (double) EEPROM.read(EEPROM_addr_v_clock) / 100; // Must be in range [0..1]
+  h_clock = constrain(h_clock, 0, 1);
+  s_clock = constrain(s_clock, 0, 1);
+  v_clock = constrain(v_clock, 0, 1);
+  h_ambilight = (double) EEPROM.read(EEPROM_addr_h_ambilight) / 100; // Must be in range [0..1]
+  s_ambilight = (double) EEPROM.read(EEPROM_addr_s_ambilight) / 100; // Must be in range [0..1]
+  v_ambilight = (double) EEPROM.read(EEPROM_addr_v_ambilight) / 100; // Must be in range [0..1]
+  h_ambilight = constrain(h_ambilight, 0, 1);
+  s_ambilight = constrain(s_ambilight, 0, 1);
+  v_ambilight = constrain(v_ambilight, 0, 1);
 
   // Convert HSV to RGB
-  rgb_conv.hsvToRgb(h_clock,s_clock,v_clock,clock_rgb);
-  rgb_conv.hsvToRgb(h_ambilight,s_ambilight,v_ambilight,ambilight_rgb);
+  rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+  rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
 
   // Initialize maxtrix indices (cannot be done before setup)
   for (byte i = 0; i <= 9; i++) { // rows
@@ -432,12 +432,12 @@ void setup() {
   server.on("/inc_brightness", []() {
     server.send(200, "text/html", webPage);
     Serial.print("Increasing LED brightness to ");
-    v_clock += hsv_value_inc;   
+    v_clock += hsv_value_inc;
     v_clock = constrain(v_clock, min_user_brightness, max_user_brightness);
     v_ambilight = v_clock;
     // Convert to RGB
-    rgb_conv.hsvToRgb(h_clock,s_clock,v_clock,clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight,s_ambilight,v_ambilight,ambilight_rgb);
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
     Serial.print(v_clock);
     Serial.println("");
     settings_changed = true;
@@ -447,12 +447,12 @@ void setup() {
   server.on("/dec_brightness", []() {
     server.send(200, "text/html", webPage);
     Serial.print("Decreasing LED brightness to ");
-    v_clock -= hsv_value_inc;   
+    v_clock -= hsv_value_inc;
     v_clock = constrain(v_clock, min_user_brightness, max_user_brightness);
     v_ambilight = v_clock;
     // Convert to RGB
-    rgb_conv.hsvToRgb(h_clock,s_clock,v_clock,clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight,s_ambilight,v_ambilight,ambilight_rgb);
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
     Serial.print(v_clock);
     Serial.println("");
     settings_changed = true;
@@ -537,37 +537,43 @@ byte temp_max_index = 0;
 ////////////////////////////////////////////////////
 void loop() {
 
-  // Handle Webserver
-  server.handleClient();
+  if (WiFi.status() == WL_CONNECTED) {
 
-  // Execute everything only if minutes or settings have changed
-  if (timeStatus() != timeNotSet) {
-    if ((minute() != prevDisplay || settings_changed)) { // Alternative: now()
+    // Handle Webserver
+    server.handleClient();
 
-      // Check whether nighttime is active
-      if (!nighttime()) {
+    // Execute everything only if minutes or settings have changed
+    if (timeStatus() != timeNotSet) {
+      if ((minute() != prevDisplay || settings_changed)) { // Alternative: now()
 
-        // Determine LED brightness based on LDR measurement
-        //get_brightness();
+        // Check whether nighttime is active
+        if (!nighttime()) {
 
-        if (en_ambilight) 
-          ambilight();
-        else 
-          disable_ambilight();
+          // Determine LED brightness based on LDR measurement
+          //get_brightness();
 
-        // Determine and display time
-        clock_display(); // Real clock
-        serial_clock_display(); // Serial port
+          if (en_ambilight)
+            ambilight();
+          else
+            disable_ambilight();
+
+          // Determine and display time
+          clock_display(); // Real clock
+          serial_clock_display(); // Serial port
+        }
+        else
+          disable_all_led();
+
+        prevDisplay = minute();
+        settings_changed = false;
+
       }
-      else      
-        disable_all_led();
-
-      prevDisplay = minute();
-      settings_changed = false;
-
     }
   }
+  else
+    ESP.reset();
 }
+
 
 ////////////////////////////////////////////////////
 // Determine current time and send data to LEDs
@@ -583,16 +589,16 @@ void clock_display() {
 
   // Single minutes
   single_min = minutes % 5;
-  if (single_min > 0 && en_single_min) 
+  if (single_min > 0 && en_single_min)
     send_time_2_LED(single_mins[single_min - 1]);
 
   // Five minutes
   min_five = minutes - single_min;
 
   // Hours
-  if (hours == 12) 
+  if (hours == 12)
     hours = 12;
-  else 
+  else
     hours = hours % 12; // hours modulo 12
 
   // Hier zwischen Sprachen wechseln
@@ -602,8 +608,8 @@ void clock_display() {
     case 0:
 
       // Display "es ist"
-      if (en_es_ist) 
-        send_time_2_LED(es_ist);      
+      if (en_es_ist)
+        send_time_2_LED(es_ist);
 
       switch (min_five) {
         case 0:
@@ -681,7 +687,7 @@ void clock_display() {
     case 1:
 
       // Display "it is"
-      if (en_es_ist) 
+      if (en_es_ist)
         send_time_2_LED(it_is);
 
       switch (min_five) {
@@ -762,22 +768,22 @@ void clock_display() {
 // Send data to LEDs
 ////////////////////////////////////////////////////
 void send_time_2_LED(byte x[]) {
-//Serial.print("LED color: R: ");
-//Serial.print(pgm_read_byte(&gamma8[clock_rgb[0]]));
-//Serial.print(", G: ");
-//Serial.print(pgm_read_byte(&gamma8[clock_rgb[1]]));
-//Serial.print(", B: ");
-//Serial.println(pgm_read_byte(&gamma8[clock_rgb[2]]));
-//
-//Serial.print("LED color: H: ");
-//Serial.print(h_clock);
-//Serial.print(", S: ");
-//Serial.print(s_clock);
-//Serial.print(", V: ");
-//Serial.println(v_clock);
+  //Serial.print("LED color: R: ");
+  //Serial.print(pgm_read_byte(&gamma8[clock_rgb[0]]));
+  //Serial.print(", G: ");
+  //Serial.print(pgm_read_byte(&gamma8[clock_rgb[1]]));
+  //Serial.print(", B: ");
+  //Serial.println(pgm_read_byte(&gamma8[clock_rgb[2]]));
+  //
+  //Serial.print("LED color: H: ");
+  //Serial.print(h_clock);
+  //Serial.print(", S: ");
+  //Serial.print(s_clock);
+  //Serial.print(", V: ");
+  //Serial.println(v_clock);
 
   for (byte i = 0; i <= 6; i++) {
-    if (x[i] != 0) 
+    if (x[i] != 0)
       // pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
       pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
   }
@@ -788,7 +794,7 @@ void send_time_2_LED(byte x[]) {
 ////////////////////////////////////////////////////
 void send_num_2_LED(byte x[]) {
   for (byte i = 0; i <= 16; i++) {
-    if (x[i] != 0) 
+    if (x[i] != 0)
       // pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
       pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
   }
@@ -829,7 +835,7 @@ void disable_ambilight() {
     pixels.setPixelColor(i, pixels.Color(0, 0, 0));
   }
   pixels.show();
-  
+
 }
 
 ////////////////////////////////////////////////////
@@ -889,11 +895,11 @@ boolean nighttime() {
 
   // If nighttime is enabled
   if (en_nighttime) {
-    if (t_night_1 == t_night_2) 
+    if (t_night_1 == t_night_2)
       return false;
     // t_1 before mignight, t_2 after midnight
     else if (t_night_1 > t_night_2) {
-      if (hour() >= t_night_1 || hour() < t_night_2)  
+      if (hour() >= t_night_1 || hour() < t_night_2)
         return true;
       else {
         en_nighttime = 1; // Enable nighttime again during the day
@@ -902,7 +908,7 @@ boolean nighttime() {
     }
     // t_1 and t_2 after midnight
     else if (t_night_1 < t_night_2) {
-      if (hour() >= t_night_1 && hour() < t_night_2)  
+      if (hour() >= t_night_1 && hour() < t_night_2)
         return true;
       else {
         en_nighttime = 1; // Enable nighttime again during the day
@@ -912,7 +918,7 @@ boolean nighttime() {
   }
   else
     return false;
-    
+
 }
 
 ////////////////////////////////////////////////////
@@ -925,14 +931,14 @@ void setSummerTime() {
     switch (month()) {
       // March
       case 3:
-        if (day() > 31 - (7 - weekday())) 
+        if (day() > 31 - (7 - weekday()))
           summertime = 1;
-        else 
+        else
           summertime = 0;
         break;
       // October
       case 10:
-        if (day() > 31 - (7 - weekday())) 
+        if (day() > 31 - (7 - weekday()))
           summertime = 0;
         else
           summertime = 1;
@@ -1103,7 +1109,7 @@ void set_min_brightness() {
 
   // Read the analog in value
   byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023/4
-  EEPROM.write(EEPROM_addr_min_brightness, v_clock*100); // Min brightness set by user
+  EEPROM.write(EEPROM_addr_min_brightness, v_clock * 100); // Min brightness set by user
   EEPROM.write(EEPROM_addr_LDR_min, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
@@ -1116,7 +1122,7 @@ void set_max_brightness() {
 
   // Read the analog in value
   byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023
-  EEPROM.write(EEPROM_addr_max_brightness, v_clock*100); // Max brightness set by user
+  EEPROM.write(EEPROM_addr_max_brightness, v_clock * 100); // Max brightness set by user
   EEPROM.write(EEPROM_addr_LDR_max, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
@@ -1358,19 +1364,20 @@ void getWeatherData()
 }
 
 const uint8_t PROGMEM gamma8[] = {
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
-    0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
-    1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
-    2,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  5,  5,  5,
-    5,  6,  6,  6,  6,  7,  7,  7,  7,  8,  8,  8,  9,  9,  9, 10,
-   10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16,
-   17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25,
-   25, 26, 27, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36,
-   37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 50,
-   51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68,
-   69, 70, 72, 73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89,
-   90, 92, 93, 95, 96, 98, 99,101,102,104,105,107,109,110,112,114,
-  115,117,119,120,122,124,126,127,129,131,133,135,137,138,140,142,
-  144,146,148,150,152,154,156,158,160,162,164,167,169,171,173,175,
-  177,180,182,184,186,189,191,193,196,198,200,203,205,208,210,213,
-  215,218,220,223,225,228,231,233,236,239,241,244,247,249,252,255 };
+  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
+  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
+  1,  1,  1,  1,  1,  1,  1,  1,  1,  2,  2,  2,  2,  2,  2,  2,
+  2,  3,  3,  3,  3,  3,  3,  3,  4,  4,  4,  4,  4,  5,  5,  5,
+  5,  6,  6,  6,  6,  7,  7,  7,  7,  8,  8,  8,  9,  9,  9, 10,
+  10, 10, 11, 11, 11, 12, 12, 13, 13, 13, 14, 14, 15, 15, 16, 16,
+  17, 17, 18, 18, 19, 19, 20, 20, 21, 21, 22, 22, 23, 24, 24, 25,
+  25, 26, 27, 27, 28, 29, 29, 30, 31, 32, 32, 33, 34, 35, 35, 36,
+  37, 38, 39, 39, 40, 41, 42, 43, 44, 45, 46, 47, 48, 49, 50, 50,
+  51, 52, 54, 55, 56, 57, 58, 59, 60, 61, 62, 63, 64, 66, 67, 68,
+  69, 70, 72, 73, 74, 75, 77, 78, 79, 81, 82, 83, 85, 86, 87, 89,
+  90, 92, 93, 95, 96, 98, 99, 101, 102, 104, 105, 107, 109, 110, 112, 114,
+  115, 117, 119, 120, 122, 124, 126, 127, 129, 131, 133, 135, 137, 138, 140, 142,
+  144, 146, 148, 150, 152, 154, 156, 158, 160, 162, 164, 167, 169, 171, 173, 175,
+  177, 180, 182, 184, 186, 189, 191, 193, 196, 198, 200, 203, 205, 208, 210, 213,
+  215, 218, 220, 223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252, 255
+};
