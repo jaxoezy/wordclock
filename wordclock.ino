@@ -12,6 +12,7 @@
 #include <RGBConverter.h>
 
 extern const uint8_t gamma8[];
+extern const uint16_t LDR_correction[];
 
 // Weather forecast Wunderground
 const char weather_host[] = "api.wunderground.com";
@@ -26,7 +27,7 @@ const int analogInPin = A0;  // Analog input pin that the potentiometer is attac
 RGBConverter rgb_conv;
 byte clock_rgb[3];
 byte ambilight_rgb[3];
-double hsv_value_inc = 0.1;
+double hsv_value_inc = 0.05;
 
 // Initialize LEDs
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(256, PIN, NEO_GRB + NEO_KHZ800);
@@ -146,8 +147,8 @@ byte single_min = 0;
 
 double min_user_brightness;
 double max_user_brightness;
-byte min_LDR_value;
-byte max_LDR_value;
+int min_LDR_value;
+int max_LDR_value;
 byte en_es_ist;
 byte en_uhr;
 byte en_single_min;
@@ -165,23 +166,23 @@ double s_ambilight;
 double v_ambilight;
 
 // EEPROM address assignment
-const int EEPROM_addr_min_brightness = 0;
-const int EEPROM_addr_LDR_min = 1;
-const int EEPROM_addr_max_brightness = 2;
-const int EEPROM_addr_LDR_max = 3;
-const int EEPROM_addr_es_ist = 4;
-const int EEPROM_addr_uhr = 5;
-const int EEPROM_addr_single_min = 6;
-const int EEPROM_addr_ambilight = 7;
-const int EEPROM_addr_language = 8;
-const int EEPROM_addr_t_night_1 = 9;
-const int EEPROM_addr_t_night_2 = 10;
-const int EEPROM_addr_h_clock = 11;
-const int EEPROM_addr_s_clock = 12;
-const int EEPROM_addr_v_clock = 13;
-const int EEPROM_addr_h_ambilight = 14;
-const int EEPROM_addr_s_ambilight = 15;
-const int EEPROM_addr_v_ambilight = 16;
+const int EEPROM_addr_min_user_brightness = 0;
+const int EEPROM_addr_LDR_min = 1; // needs two bytes
+const int EEPROM_addr_max_user_brightness = 3;
+const int EEPROM_addr_LDR_max = 4; // needs two bytes
+const int EEPROM_addr_es_ist = 6;
+const int EEPROM_addr_uhr = 7;
+const int EEPROM_addr_single_min = 8;
+const int EEPROM_addr_ambilight = 9;
+const int EEPROM_addr_language = 10;
+const int EEPROM_addr_t_night_1 = 11;
+const int EEPROM_addr_t_night_2 = 12;
+const int EEPROM_addr_h_clock = 13;
+const int EEPROM_addr_s_clock = 14;
+const int EEPROM_addr_v_clock = 15;
+const int EEPROM_addr_h_ambilight = 16;
+const int EEPROM_addr_s_ambilight = 17;
+const int EEPROM_addr_v_ambilight = 18;
 
 ////////////////////////////////////////////////////
 // Setup routine
@@ -210,32 +211,34 @@ void setup() {
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
   // Execute this code only once to initialize default values
-  //    EEPROM.write(EEPROM_addr_min_brightness, 10); // Min brightness set by user
-  //    EEPROM.write(EEPROM_addr_LDR_min, 0); // Correspondig LDR value
-  //    EEPROM.write(EEPROM_addr_max_brightness, 80); // Max brightness set by user
-  //    EEPROM.write(EEPROM_addr_LDR_max, 255); // Correspondig LDR value
-  //    EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
-  //    EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
-  //    EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
-  //    EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
-  //    EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
-  //    EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
-  //    EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
-  //    EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
-  //    EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
-  //    EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
-  //    EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
-  //    EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
-  //    EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
-  //    EEPROM.commit();
+//  EEPROM.write(EEPROM_addr_min_user_brightness, 45); // Min brightness set by user
+//  EEPROMWriteInt(EEPROM_addr_LDR_min, 124); // Correspondig LDR value
+//  EEPROM.write(EEPROM_addr_max_user_brightness, 100); // Max brightness set by user
+//  EEPROMWriteInt(EEPROM_addr_LDR_max, 912); // Correspondig LDR value
+//  EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
+//  EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
+//  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
+//  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
+//  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
+//  EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
+//  EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
+//  EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
+//  EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
+//  EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
+//  EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
+//  EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
+//  EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
+//  EEPROM.commit();
 
   // Read settings from EEPROM
-  min_user_brightness = EEPROM.read(EEPROM_addr_min_brightness) / 100;
-  max_user_brightness = EEPROM.read(EEPROM_addr_max_brightness) / 100;
+  min_user_brightness = EEPROM.read(EEPROM_addr_min_user_brightness);
+  min_user_brightness = min_user_brightness / 100;
+  max_user_brightness = EEPROM.read(EEPROM_addr_max_user_brightness);
+  min_user_brightness = max_user_brightness / 100;
   min_user_brightness = constrain(min_user_brightness, 0, 1);
   max_user_brightness = constrain(max_user_brightness, 0, 1);
-  min_LDR_value = EEPROM.read(EEPROM_addr_LDR_min);
-  max_LDR_value = EEPROM.read(EEPROM_addr_LDR_max);
+  min_LDR_value = EEPROMReadInt(EEPROM_addr_LDR_min);
+  max_LDR_value = EEPROMReadInt(EEPROM_addr_LDR_max);
   en_es_ist = EEPROM.read(EEPROM_addr_es_ist);
   en_uhr = EEPROM.read(EEPROM_addr_uhr);
   en_single_min = EEPROM.read(EEPROM_addr_single_min);
@@ -274,17 +277,17 @@ void setup() {
 
   // HTML website for server
   webPage += "<font size=""7""><h1>Wordclock Web Server</h1></font>";
-  webPage += "<font size=""7""><p>Datum (Tag): <a href=\"day_of_month\"><button>Anzeigen</button></a></p></font>";
-  webPage += "<font size=""7""><p>Sprache <a href=\"language_ger\"><button>Deutsch</button></a>&nbsp;<a href=\"language_en\"><button>Englisch</button></a></p></font>";
-  webPage += "<font size=""7""><p>Aktuelle Temperatur: <a href=\"disp_temp\"><button>Anzeigen</button></a></p></font>";
-  webPage += "<font size=""7""><p>'Uhr' anzeigen: <a href=\"uhr_on\"><button>Ein</button></a>&nbsp;<a href=\"uhr_off\"><button>Aus</button></a></p></font>";
-  webPage += "<font size=""7""><p>'Es ist' anzeigen: <a href=\"es_ist_on\"><button>Ein</button></a>&nbsp;<a href=\"es_ist_off\"><button>Aus</button></a></p></font>";
-  webPage += "<font size=""7""><p>Einzelne Minuten anzeigen : <a href=\"single_min_on\"><button>Ein</button></a>&nbsp;<a href=\"single_min_off\"><button>Aus</button></a></p></font>";
-  webPage += "<font size=""7""><p>LED Test: <a href=\"led_test\"><button>LED Test</button></a></p></font>";
-  webPage += "<font size=""7""><p>Helligkeit: <a href=\"inc_brightness\"><button>Erhoehen</button></a>&nbsp;<a href=\"dec_brightness\"><button>Reduzieren</button></a></p></font>";
-  webPage += "<font size=""7""><p>Kalibrieren: <a href=\"calib_bright\"><button>Heller Raum</button></a>&nbsp;<a href=\"calib_dark\"><button>Dunkler Raum</button></a></p></font>";
-  webPage += "<font size=""7""><p>Ambilight: <a href=\"ambilight_on\"><button>Ein</button></a>&nbsp;<a href=\"ambilight_off\"><button>Aus</button></a></p></font>";
-  webPage += "<font size=""7""><p>Nachtzeit: <a href=\"nighttime_on\"><button>Ein</button></a>&nbsp;<a href=\"nighttime_off\"><button>Aus</button></a></p></font>";
+  webPage += "<font size=""7""><p>Date (Day): <a href=\"day_of_month\"><button>Show</button></a></p></font>";
+  webPage += "<font size=""7""><p>Language <a href=\"language_ger\"><button>German</button></a>&nbsp;<a href=\"language_en\"><button>English</button></a></p></font>";
+  webPage += "<font size=""7""><p>Current Temperature: <a href=\"disp_temp\"><button>Show</button></a></p></font>";
+  webPage += "<font size=""7""><p>Display 'o'clock': <a href=\"uhr_on\"><button>On</button></a>&nbsp;<a href=\"uhr_off\"><button>Off</button></a></p></font>";
+  webPage += "<font size=""7""><p>Display 'It is': <a href=\"es_ist_on\"><button>On</button></a>&nbsp;<a href=\"es_ist_off\"><button>Off</button></a></p></font>";
+  webPage += "<font size=""7""><p>Use corner LEDs for single minutes: <a href=\"single_min_on\"><button>On</button></a>&nbsp;<a href=\"single_min_off\"><button>Off</button></a></p></font>";
+  webPage += "<font size=""7""><p>LED test: <a href=\"led_test\"><button>LED test</button></a></p></font>";
+  webPage += "<font size=""7""><p>LED brightness: <a href=\"inc_brightness\"><button>Increase</button></a>&nbsp;<a href=\"dec_brightness\"><button>Decrease</button></a></p></font>";
+  webPage += "<font size=""7""><p>Calibrate brightness: <a href=\"calib_bright\"><button>Light room</button></a>&nbsp;<a href=\"calib_dark\"><button>Dark room</button></a></p></font>";
+  webPage += "<font size=""7""><p>Ambilight: <a href=\"ambilight_on\"><button>On</button></a>&nbsp;<a href=\"ambilight_off\"><button>Off</button></a></p></font>";
+  webPage += "<font size=""7""><p>Nighttime: <a href=\"nighttime_on\"><button>On</button></a>&nbsp;<a href=\"nighttime_off\"><button>Off</button></a></p></font>";
 
   pixels.begin(); // This initializes the NeoPixel library.
 
@@ -301,7 +304,7 @@ void setup() {
   // Todo: Test different sync intervals
   setSyncInterval(300);
 
-  // Connect to wordlock through wordclock.local
+  // Connect to wordlock via wordclock.local
   if (mdns.begin("wordclock", WiFi.localIP())) {
     Serial.println("MDNS responder started");
   }
@@ -433,7 +436,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.print("Increasing LED brightness to ");
     v_clock += hsv_value_inc;
-    v_clock = constrain(v_clock, min_user_brightness, max_user_brightness);
+    v_clock = constrain(v_clock, 0, 1);
     v_ambilight = v_clock;
     // Convert to RGB
     rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
@@ -448,7 +451,7 @@ void setup() {
     server.send(200, "text/html", webPage);
     Serial.print("Decreasing LED brightness to ");
     v_clock -= hsv_value_inc;
-    v_clock = constrain(v_clock, min_user_brightness, max_user_brightness);
+    v_clock = constrain(v_clock, 0, 1);
     v_ambilight = v_clock;
     // Convert to RGB
     rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
@@ -462,16 +465,16 @@ void setup() {
   server.on("/calib_bright", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Brightness for bright room calibrated");
-    // set_max_brightness();
-    // settings_changed = true;
+    set_max_brightness();
+    settings_changed = true;
     delay(1000);
   });
 
   server.on("/calib_dark", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Brightness for dark room calibrated");
-    // set_min_brightness();
-    // settings_changed = true;
+    set_min_brightness();
+    settings_changed = true;
     delay(1000);
   });
 
@@ -550,7 +553,7 @@ void loop() {
         if (!nighttime()) {
 
           // Determine LED brightness based on LDR measurement
-          //get_brightness();
+          get_brightness();
 
           if (en_ambilight)
             ambilight();
@@ -768,6 +771,14 @@ void clock_display() {
 // Send data to LEDs
 ////////////////////////////////////////////////////
 void send_time_2_LED(byte x[]) {
+
+  for (byte i = 0; i <= 6; i++) {
+    if (x[i] != 0)
+      // pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
+      pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
+  }
+
+  // For debugging:
   //Serial.print("LED color: R: ");
   //Serial.print(pgm_read_byte(&gamma8[clock_rgb[0]]));
   //Serial.print(", G: ");
@@ -781,12 +792,6 @@ void send_time_2_LED(byte x[]) {
   //Serial.print(s_clock);
   //Serial.print(", V: ");
   //Serial.println(v_clock);
-
-  for (byte i = 0; i <= 6; i++) {
-    if (x[i] != 0)
-      // pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
-      pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
-  }
 }
 
 ////////////////////////////////////////////////////
@@ -1080,26 +1085,42 @@ void show_day() {
 ////////////////////////////////////////////////////
 // Determine brightness based on sensor data and limits
 ////////////////////////////////////////////////////
-// TODO: Helligkeit ist noch nicht mit eingebaut
-// Bisher nur default-Farbe, die Helligkeitsskalierung ist nicht enthalten
 void get_brightness() {
 
   // Read LDR
-  int sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023
+  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+  sensorValue = constrain(sensorValue, 0, 1023);
 
-  if (min_user_brightness > max_user_brightness)
-    max_user_brightness = min_user_brightness;
+  // LDR correction
+  sensorValue = pgm_read_word(&LDR_correction[sensorValue]);
 
-  v_clock = map(sensorValue, min_LDR_value, max_LDR_value, min_user_brightness, max_user_brightness);
-  v_clock = constrain(v_clock, min_user_brightness, max_user_brightness);
+  sensorValue = constrain(sensorValue, min_LDR_value, max_LDR_value);
+
+  // Map sensor value
+  v_clock = map(sensorValue, min_LDR_value, max_LDR_value, min_user_brightness * 100, max_user_brightness * 100);
+  v_clock = v_clock / 100;
   v_ambilight = v_clock;
+
+  // Convert to RGB
+  rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+  rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
 
   // Print sensor value to serial monitor
   Serial.print("Sensor value: ");
   Serial.print(sensorValue);
-  Serial.print("/255, Brightness: ");
+  Serial.print("/1024, Brightness: ");
+  Serial.print(", Brightness: ");
   Serial.print(v_clock);
   Serial.println("/1");
+  //  Serial.print("Min LDR: ");
+  //  Serial.print(min_LDR_value);
+  //  Serial.print(", Max LDR: ");
+  //  Serial.println(max_LDR_value);
+  //  Serial.print("Min User: ");
+  //  Serial.print(min_user_brightness);
+  //  Serial.print(", Max User: ");
+  //  Serial.print(max_user_brightness);
+
 }
 
 ////////////////////////////////////////////////////
@@ -1108,9 +1129,12 @@ void get_brightness() {
 void set_min_brightness() {
 
   // Read the analog in value
-  byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023/4
-  EEPROM.write(EEPROM_addr_min_brightness, v_clock * 100); // Min brightness set by user
-  EEPROM.write(EEPROM_addr_LDR_min, sensorValue); // Correspondig LDR value
+  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+  sensorValue = constrain(sensorValue, 0, 1023);
+  sensorValue = pgm_read_word(&LDR_correction[sensorValue]);
+
+  EEPROM.write(EEPROM_addr_min_user_brightness, v_clock * 100); // Min brightness set by user
+  EEPROMWriteInt(EEPROM_addr_LDR_min, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
 }
@@ -1121,9 +1145,12 @@ void set_min_brightness() {
 void set_max_brightness() {
 
   // Read the analog in value
-  byte sensorValue = analogRead(analogInPin) / 4; // Value between 0 and 1023
-  EEPROM.write(EEPROM_addr_max_brightness, v_clock * 100); // Max brightness set by user
-  EEPROM.write(EEPROM_addr_LDR_max, sensorValue); // Correspondig LDR value
+  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
+  sensorValue = constrain(sensorValue, 0, 1023);
+  sensorValue = pgm_read_word(&LDR_correction[sensorValue]);
+
+  EEPROM.write(EEPROM_addr_max_user_brightness, v_clock * 100); // Max brightness set by user
+  EEPROMWriteInt(EEPROM_addr_LDR_max, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
 }
@@ -1141,6 +1168,29 @@ void test_numbers() {
       delay(500);
     }
   }
+}
+
+////////////////////////////////////////////////////
+// This function will write a 2 byte integer to the eeprom at the specified address and address + 1
+////////////////////////////////////////////////////
+void EEPROMWriteInt(int p_address, int p_value)
+{
+  byte lowByte = ((p_value >> 0) & 0xFF);
+  byte highByte = ((p_value >> 8) & 0xFF);
+
+  EEPROM.write(p_address, lowByte);
+  EEPROM.write(p_address + 1, highByte);
+}
+
+////////////////////////////////////////////////////
+// This function will read a 2 byte integer from the eeprom at the specified address and address + 1
+////////////////////////////////////////////////////
+unsigned int EEPROMReadInt(int p_address)
+{
+  byte lowByte = EEPROM.read(p_address);
+  byte highByte = EEPROM.read(p_address + 1);
+
+  return ((lowByte << 0) & 0xFF) + ((highByte << 8) & 0xFF00);
 }
 
 //  //  read temperature from somewhere
@@ -1363,6 +1413,7 @@ void getWeatherData()
 
 }
 
+// LED gamma correction
 const uint8_t PROGMEM gamma8[] = {
   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,
   0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  0,  1,  1,  1,  1,
@@ -1381,3 +1432,142 @@ const uint8_t PROGMEM gamma8[] = {
   177, 180, 182, 184, 186, 189, 191, 193, 196, 198, 200, 203, 205, 208, 210, 213,
   215, 218, 220, 223, 225, 228, 231, 233, 236, 239, 241, 244, 247, 249, 252, 255
 };
+
+// LDR correction (logarithm)
+// Function: y = log10(x+1)*1023/log10(1023+1);
+//const uint16_t PROGMEM LDR_correction[] = {
+//0, 102, 162, 204, 237, 264, 287, 306, 324, 339, 353, 366, 378, 389, 399, 409,
+//418, 426, 434, 442, 449, 456, 462, 469, 475, 480, 486, 491, 496, 501, 506, 511,
+//516, 520, 524, 528, 532, 536, 540, 544, 548, 551, 555, 558, 561, 565, 568, 571,
+//574, 577, 580, 583, 585, 588, 591, 594, 596, 599, 601, 604, 606, 609, 611, 613,
+//616, 618, 620, 622, 624, 627, 629, 631, 633, 635, 637, 639, 641, 642, 644, 646,
+//648, 650, 652, 653, 655, 657, 659, 660, 662, 664, 665, 667, 668, 670, 672, 673,
+//675, 676, 678, 679, 681, 682, 684, 685, 686, 688, 689, 691, 692, 693, 695, 696,
+//697, 699, 700, 701, 702, 704, 705, 706, 707, 709, 710, 711, 712, 713, 714, 716,
+//717, 718, 719, 720, 721, 722, 723, 725, 726, 727, 728, 729, 730, 731, 732, 733,
+//734, 735, 736, 737, 738, 739, 740, 741, 742, 743, 744, 745, 746, 747, 748, 749,
+//749, 750, 751, 752, 753, 754, 755, 756, 757, 757, 758, 759, 760, 761, 762, 763,
+//763, 764, 765, 766, 767, 768, 768, 769, 770, 771, 772, 772, 773, 774, 775, 775,
+//776, 777, 778, 778, 779, 780, 781, 781, 782, 783, 784, 784, 785, 786, 787, 787,
+//788, 789, 789, 790, 791, 791, 792, 793, 794, 794, 795, 796, 796, 797, 798, 798,
+//799, 800, 800, 801, 801, 802, 803, 803, 804, 805, 805, 806, 807, 807, 808, 808,
+//809, 810, 810, 811, 811, 812, 813, 813, 814, 814, 815, 816, 816, 817, 817, 818,
+//818, 819, 820, 820, 821, 821, 822, 822, 823, 824, 824, 825, 825, 826, 826, 827,
+//827, 828, 828, 829, 830, 830, 831, 831, 832, 832, 833, 833, 834, 834, 835, 835,
+//836, 836, 837, 837, 838, 838, 839, 839, 840, 840, 841, 841, 842, 842, 843, 843,
+//844, 844, 845, 845, 846, 846, 847, 847, 848, 848, 849, 849, 849, 850, 850, 851,
+//851, 852, 852, 853, 853, 854, 854, 854, 855, 855, 856, 856, 857, 857, 858, 858,
+//858, 859, 859, 860, 860, 861, 861, 862, 862, 862, 863, 863, 864, 864, 864, 865,
+//865, 866, 866, 867, 867, 867, 868, 868, 869, 869, 869, 870, 870, 871, 871, 871,
+//872, 872, 873, 873, 873, 874, 874, 875, 875, 875, 876, 876, 877, 877, 877, 878,
+//878, 879, 879, 879, 880, 880, 880, 881, 881, 882, 882, 882, 883, 883, 883, 884,
+//884, 885, 885, 885, 886, 886, 886, 887, 887, 887, 888, 888, 888, 889, 889, 890,
+//890, 890, 891, 891, 891, 892, 892, 892, 893, 893, 893, 894, 894, 894, 895, 895,
+//895, 896, 896, 896, 897, 897, 897, 898, 898, 899, 899, 899, 900, 900, 900, 900,
+//901, 901, 901, 902, 902, 902, 903, 903, 903, 904, 904, 904, 905, 905, 905, 906,
+//906, 906, 907, 907, 907, 908, 908, 908, 909, 909, 909, 909, 910, 910, 910, 911,
+//911, 911, 912, 912, 912, 913, 913, 913, 913, 914, 914, 914, 915, 915, 915, 916,
+//916, 916, 916, 917, 917, 917, 918, 918, 918, 918, 919, 919, 919, 920, 920, 920,
+//920, 921, 921, 921, 922, 922, 922, 922, 923, 923, 923, 924, 924, 924, 924, 925,
+//925, 925, 926, 926, 926, 926, 927, 927, 927, 928, 928, 928, 928, 929, 929, 929,
+//929, 930, 930, 930, 930, 931, 931, 931, 932, 932, 932, 932, 933, 933, 933, 933,
+//934, 934, 934, 934, 935, 935, 935, 936, 936, 936, 936, 937, 937, 937, 937, 938,
+//938, 938, 938, 939, 939, 939, 939, 940, 940, 940, 940, 941, 941, 941, 941, 942,
+//942, 942, 942, 943, 943, 943, 943, 944, 944, 944, 944, 945, 945, 945, 945, 946,
+//946, 946, 946, 947, 947, 947, 947, 947, 948, 948, 948, 948, 949, 949, 949, 949,
+//950, 950, 950, 950, 951, 951, 951, 951, 952, 952, 952, 952, 952, 953, 953, 953,
+//953, 954, 954, 954, 954, 955, 955, 955, 955, 955, 956, 956, 956, 956, 957, 957,
+//957, 957, 957, 958, 958, 958, 958, 959, 959, 959, 959, 959, 960, 960, 960, 960,
+//961, 961, 961, 961, 961, 962, 962, 962, 962, 963, 963, 963, 963, 963, 964, 964,
+//964, 964, 964, 965, 965, 965, 965, 966, 966, 966, 966, 966, 967, 967, 967, 967,
+//967, 968, 968, 968, 968, 968, 969, 969, 969, 969, 969, 970, 970, 970, 970, 971,
+//971, 971, 971, 971, 972, 972, 972, 972, 972, 973, 973, 973, 973, 973, 974, 974,
+//974, 974, 974, 975, 975, 975, 975, 975, 976, 976, 976, 976, 976, 977, 977, 977,
+//977, 977, 978, 978, 978, 978, 978, 978, 979, 979, 979, 979, 979, 980, 980, 980,
+//980, 980, 981, 981, 981, 981, 981, 982, 982, 982, 982, 982, 983, 983, 983, 983,
+//983, 983, 984, 984, 984, 984, 984, 985, 985, 985, 985, 985, 986, 986, 986, 986,
+//986, 986, 987, 987, 987, 987, 987, 988, 988, 988, 988, 988, 988, 989, 989, 989,
+//989, 989, 990, 990, 990, 990, 990, 990, 991, 991, 991, 991, 991, 991, 992, 992,
+//992, 992, 992, 993, 993, 993, 993, 993, 993, 994, 994, 994, 994, 994, 994, 995,
+//995, 995, 995, 995, 996, 996, 996, 996, 996, 996, 997, 997, 997, 997, 997, 997,
+//998, 998, 998, 998, 998, 998, 999, 999, 999, 999, 999, 999, 1000, 1000, 1000, 1000,
+//1000, 1000, 1001, 1001, 1001, 1001, 1001, 1001, 1002, 1002, 1002, 1002, 1002, 1002, 1003, 1003,
+//1003, 1003, 1003, 1003, 1004, 1004, 1004, 1004, 1004, 1004, 1005, 1005, 1005, 1005, 1005, 1005,
+//1006, 1006, 1006, 1006, 1006, 1006, 1007, 1007, 1007, 1007, 1007, 1007, 1007, 1008, 1008, 1008,
+//1008, 1008, 1008, 1009, 1009, 1009, 1009, 1009, 1009, 1010, 1010, 1010, 1010, 1010, 1010, 1010,
+//1011, 1011, 1011, 1011, 1011, 1011, 1012, 1012, 1012, 1012, 1012, 1012, 1013, 1013, 1013, 1013,
+//1013, 1013, 1013, 1014, 1014, 1014, 1014, 1014, 1014, 1015, 1015, 1015, 1015, 1015, 1015, 1015,
+//1016, 1016, 1016, 1016, 1016, 1016, 1016, 1017, 1017, 1017, 1017, 1017, 1017, 1018, 1018, 1018,
+//1018, 1018, 1018, 1018, 1019, 1019, 1019, 1019, 1019, 1019, 1019, 1020, 1020, 1020, 1020, 1020,
+//1020, 1020, 1021, 1021, 1021, 1021, 1021, 1021, 1021, 1022, 1022, 1022, 1022, 1022, 1022, 1023
+//};
+
+// LDR correction (sqrt)
+// Function: y = sqrt(x)*1023/sqrt(x);
+const uint16_t PROGMEM LDR_correction[] = {
+  0, 31, 45, 55, 63, 71, 78, 84, 90, 95, 101, 106, 110, 115, 119, 123,
+  127, 131, 135, 139, 143, 146, 150, 153, 156, 159, 163, 166, 169, 172, 175, 178,
+  180, 183, 186, 189, 191, 194, 197, 199, 202, 204, 207, 209, 212, 214, 216, 219,
+  221, 223, 226, 228, 230, 232, 235, 237, 239, 241, 243, 245, 247, 249, 251, 253,
+  255, 257, 259, 261, 263, 265, 267, 269, 271, 273, 275, 276, 278, 280, 282, 284,
+  286, 287, 289, 291, 293, 294, 296, 298, 300, 301, 303, 305, 306, 308, 310, 311,
+  313, 315, 316, 318, 319, 321, 323, 324, 326, 327, 329, 330, 332, 333, 335, 336,
+  338, 339, 341, 342, 344, 345, 347, 348, 350, 351, 353, 354, 356, 357, 359, 360,
+  361, 363, 364, 366, 367, 368, 370, 371, 372, 374, 375, 377, 378, 379, 381, 382,
+  383, 385, 386, 387, 389, 390, 391, 393, 394, 395, 396, 398, 399, 400, 402, 403,
+  404, 405, 407, 408, 409, 410, 412, 413, 414, 415, 417, 418, 419, 420, 421, 423,
+  424, 425, 426, 427, 429, 430, 431, 432, 433, 435, 436, 437, 438, 439, 440, 442,
+  443, 444, 445, 446, 447, 448, 450, 451, 452, 453, 454, 455, 456, 457, 459, 460,
+  461, 462, 463, 464, 465, 466, 467, 468, 470, 471, 472, 473, 474, 475, 476, 477,
+  478, 479, 480, 481, 482, 484, 485, 486, 487, 488, 489, 490, 491, 492, 493, 494,
+  495, 496, 497, 498, 499, 500, 501, 502, 503, 504, 505, 506, 507, 508, 509, 510,
+  511, 512, 513, 514, 515, 516, 517, 518, 519, 520, 521, 522, 523, 524, 525, 526,
+  527, 528, 529, 530, 531, 532, 533, 534, 535, 536, 537, 538, 539, 539, 540, 541,
+  542, 543, 544, 545, 546, 547, 548, 549, 550, 551, 552, 553, 553, 554, 555, 556,
+  557, 558, 559, 560, 561, 562, 563, 564, 564, 565, 566, 567, 568, 569, 570, 571,
+  572, 573, 573, 574, 575, 576, 577, 578, 579, 580, 581, 581, 582, 583, 584, 585,
+  586, 587, 588, 588, 589, 590, 591, 592, 593, 594, 594, 595, 596, 597, 598, 599,
+  600, 600, 601, 602, 603, 604, 605, 606, 606, 607, 608, 609, 610, 611, 611, 612,
+  613, 614, 615, 616, 616, 617, 618, 619, 620, 621, 621, 622, 623, 624, 625, 625,
+  626, 627, 628, 629, 630, 630, 631, 632, 633, 634, 634, 635, 636, 637, 638, 638,
+  639, 640, 641, 642, 642, 643, 644, 645, 646, 646, 647, 648, 649, 649, 650, 651,
+  652, 653, 653, 654, 655, 656, 657, 657, 658, 659, 660, 660, 661, 662, 663, 664,
+  664, 665, 666, 667, 667, 668, 669, 670, 670, 671, 672, 673, 673, 674, 675, 676,
+  676, 677, 678, 679, 679, 680, 681, 682, 682, 683, 684, 685, 685, 686, 687, 688,
+  688, 689, 690, 691, 691, 692, 693, 694, 694, 695, 696, 697, 697, 698, 699, 700,
+  700, 701, 702, 702, 703, 704, 705, 705, 706, 707, 708, 708, 709, 710, 710, 711,
+  712, 713, 713, 714, 715, 715, 716, 717, 718, 718, 719, 720, 720, 721, 722, 723,
+  723, 724, 725, 725, 726, 727, 727, 728, 729, 730, 730, 731, 732, 732, 733, 734,
+  734, 735, 736, 737, 737, 738, 739, 739, 740, 741, 741, 742, 743, 743, 744, 745,
+  745, 746, 747, 748, 748, 749, 750, 750, 751, 752, 752, 753, 754, 754, 755, 756,
+  756, 757, 758, 758, 759, 760, 760, 761, 762, 762, 763, 764, 764, 765, 766, 766,
+  767, 768, 768, 769, 770, 770, 771, 772, 772, 773, 774, 774, 775, 776, 776, 777,
+  778, 778, 779, 780, 780, 781, 782, 782, 783, 784, 784, 785, 786, 786, 787, 788,
+  788, 789, 789, 790, 791, 791, 792, 793, 793, 794, 795, 795, 796, 797, 797, 798,
+  798, 799, 800, 800, 801, 802, 802, 803, 804, 804, 805, 805, 806, 807, 807, 808,
+  809, 809, 810, 811, 811, 812, 812, 813, 814, 814, 815, 816, 816, 817, 817, 818,
+  819, 819, 820, 821, 821, 822, 822, 823, 824, 824, 825, 826, 826, 827, 827, 828,
+  829, 829, 830, 830, 831, 832, 832, 833, 834, 834, 835, 835, 836, 837, 837, 838,
+  838, 839, 840, 840, 841, 841, 842, 843, 843, 844, 845, 845, 846, 846, 847, 848,
+  848, 849, 849, 850, 851, 851, 852, 852, 853, 854, 854, 855, 855, 856, 857, 857,
+  858, 858, 859, 860, 860, 861, 861, 862, 862, 863, 864, 864, 865, 865, 866, 867,
+  867, 868, 868, 869, 870, 870, 871, 871, 872, 873, 873, 874, 874, 875, 875, 876,
+  877, 877, 878, 878, 879, 880, 880, 881, 881, 882, 882, 883, 884, 884, 885, 885,
+  886, 886, 887, 888, 888, 889, 889, 890, 890, 891, 892, 892, 893, 893, 894, 894,
+  895, 896, 896, 897, 897, 898, 898, 899, 900, 900, 901, 901, 902, 902, 903, 904,
+  904, 905, 905, 906, 906, 907, 908, 908, 909, 909, 910, 910, 911, 911, 912, 913,
+  913, 914, 914, 915, 915, 916, 917, 917, 918, 918, 919, 919, 920, 920, 921, 922,
+  922, 923, 923, 924, 924, 925, 925, 926, 926, 927, 928, 928, 929, 929, 930, 930,
+  931, 931, 932, 933, 933, 934, 934, 935, 935, 936, 936, 937, 937, 938, 939, 939,
+  940, 940, 941, 941, 942, 942, 943, 943, 944, 945, 945, 946, 946, 947, 947, 948,
+  948, 949, 949, 950, 950, 951, 952, 952, 953, 953, 954, 954, 955, 955, 956, 956,
+  957, 957, 958, 958, 959, 960, 960, 961, 961, 962, 962, 963, 963, 964, 964, 965,
+  965, 966, 966, 967, 968, 968, 969, 969, 970, 970, 971, 971, 972, 972, 973, 973,
+  974, 974, 975, 975, 976, 976, 977, 978, 978, 979, 979, 980, 980, 981, 981, 982,
+  982, 983, 983, 984, 984, 985, 985, 986, 986, 987, 987, 988, 988, 989, 989, 990,
+  990, 991, 992, 992, 993, 993, 994, 994, 995, 995, 996, 996, 997, 997, 998, 998,
+  999, 999, 1000, 1000, 1001, 1001, 1002, 1002, 1003, 1003, 1004, 1004, 1005, 1005, 1006, 1006,
+  1007, 1007, 1008, 1008, 1009, 1009, 1010, 1010, 1011, 1011, 1012, 1012, 1013, 1013, 1014, 1014,
+  1015, 1015, 1016, 1016, 1017, 1017, 1018, 1018, 1019, 1019, 1020, 1020, 1021, 1021, 1022, 1023
+};
+
