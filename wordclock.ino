@@ -14,12 +14,6 @@
 extern const uint8_t gamma8[];
 extern const uint16_t LDR_correction[];
 
-// Weather forecast Wunderground
-const char weather_host[] = "api.wunderground.com";
-const char COUNTRY[] = "Germany";
-const char CITY[] = "Munich";
-const char APIKEY[] = ""; // Wunderground API key
-
 // Set Pins
 #define PIN D1 // LED data pin
 const int analogInPin = A0;  // Analog input pin that the potentiometer is attached to
@@ -149,8 +143,8 @@ double min_user_brightness;
 double max_user_brightness;
 int min_LDR_value;
 int max_LDR_value;
-byte en_es_ist;
-byte en_uhr;
+byte en_it_is;
+byte en_oclock;
 byte en_single_min;
 byte en_ambilight;
 boolean settings_changed = false;
@@ -198,8 +192,7 @@ void setup() {
   wifiManager.setAPCallback(configModeCallback);
 
   // Fetches ssid and pass and tries to connect
-  // If it does not connect it starts an access point with the specified name
-  // here "Wordclock"
+  // If it does not connect it starts an access point with the specified name "Wordclock"
   // and goes into a blocking loop awaiting configuration
   if (!wifiManager.autoConnect("Wordclock")) {
     Serial.println("failed to connect and hit timeout");
@@ -211,24 +204,24 @@ void setup() {
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
   // Execute this code only once to initialize default values
-//  EEPROM.write(EEPROM_addr_min_user_brightness, 45); // Min brightness set by user
-//  EEPROMWriteInt(EEPROM_addr_LDR_min, 124); // Correspondig LDR value
-//  EEPROM.write(EEPROM_addr_max_user_brightness, 100); // Max brightness set by user
-//  EEPROMWriteInt(EEPROM_addr_LDR_max, 912); // Correspondig LDR value
-//  EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
-//  EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
-//  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
-//  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
-//  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
-//  EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
-//  EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
-//  EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
-//  EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
-//  EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
-//  EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
-//  EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
-//  EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
-//  EEPROM.commit();
+  //  EEPROM.write(EEPROM_addr_min_user_brightness, 45); // Min brightness set by user
+  //  EEPROMWriteInt(EEPROM_addr_LDR_min, 124); // Correspondig LDR value
+  //  EEPROM.write(EEPROM_addr_max_user_brightness, 100); // Max brightness set by user
+  //  EEPROMWriteInt(EEPROM_addr_LDR_max, 912); // Correspondig LDR value
+  //  EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
+  //  EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
+  //  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
+  //  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
+  //  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
+  //  EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
+  //  EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
+  //  EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
+  //  EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
+  //  EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
+  //  EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
+  //  EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
+  //  EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
+  //  EEPROM.commit();
 
   // Read settings from EEPROM
   min_user_brightness = EEPROM.read(EEPROM_addr_min_user_brightness);
@@ -239,8 +232,8 @@ void setup() {
   max_user_brightness = constrain(max_user_brightness, 0, 1);
   min_LDR_value = EEPROMReadInt(EEPROM_addr_LDR_min);
   max_LDR_value = EEPROMReadInt(EEPROM_addr_LDR_max);
-  en_es_ist = EEPROM.read(EEPROM_addr_es_ist);
-  en_uhr = EEPROM.read(EEPROM_addr_uhr);
+  en_it_is = EEPROM.read(EEPROM_addr_es_ist);
+  en_oclock = EEPROM.read(EEPROM_addr_uhr);
   en_single_min = EEPROM.read(EEPROM_addr_single_min);
   en_ambilight = EEPROM.read(EEPROM_addr_ambilight);
   language = EEPROM.read(EEPROM_addr_language);
@@ -275,19 +268,37 @@ void setup() {
     }
   }
 
-  // HTML website for server
-  webPage += "<font size=""7""><h1>Wordclock Web Server</h1></font>";
-  webPage += "<font size=""7""><p>Date (Day): <a href=\"day_of_month\"><button>Show</button></a></p></font>";
-  webPage += "<font size=""7""><p>Language <a href=\"language_ger\"><button>German</button></a>&nbsp;<a href=\"language_en\"><button>English</button></a></p></font>";
-  webPage += "<font size=""7""><p>Current Temperature: <a href=\"disp_temp\"><button>Show</button></a></p></font>";
-  webPage += "<font size=""7""><p>Display 'o'clock': <a href=\"uhr_on\"><button>On</button></a>&nbsp;<a href=\"uhr_off\"><button>Off</button></a></p></font>";
-  webPage += "<font size=""7""><p>Display 'It is': <a href=\"es_ist_on\"><button>On</button></a>&nbsp;<a href=\"es_ist_off\"><button>Off</button></a></p></font>";
-  webPage += "<font size=""7""><p>Use corner LEDs for single minutes: <a href=\"single_min_on\"><button>On</button></a>&nbsp;<a href=\"single_min_off\"><button>Off</button></a></p></font>";
-  webPage += "<font size=""7""><p>LED test: <a href=\"led_test\"><button>LED test</button></a></p></font>";
-  webPage += "<font size=""7""><p>LED brightness: <a href=\"inc_brightness\"><button>Increase</button></a>&nbsp;<a href=\"dec_brightness\"><button>Decrease</button></a></p></font>";
-  webPage += "<font size=""7""><p>Calibrate brightness: <a href=\"calib_bright\"><button>Light room</button></a>&nbsp;<a href=\"calib_dark\"><button>Dark room</button></a></p></font>";
-  webPage += "<font size=""7""><p>Ambilight: <a href=\"ambilight_on\"><button>On</button></a>&nbsp;<a href=\"ambilight_off\"><button>Off</button></a></p></font>";
-  webPage += "<font size=""7""><p>Nighttime: <a href=\"nighttime_on\"><button>On</button></a>&nbsp;<a href=\"nighttime_off\"><button>Off</button></a></p></font>";
+  // html website for web server
+  webPage += "<h1>Wordclock web server</h1>";
+  webPage += "<p>Unless stated otherwise, all settings are stored permanently.</p>";
+
+  // LED color
+  webPage += "<h2>LED color & brightness</h2>";
+  webPage += "<p>HSV format is used for LEDs colors. Check <a href='http://colorizer.org' target='_blank'>Colorizer</a> (HSV/HSB).<br>";
+  webPage += "For brightness calibration, first adjust brightness manually and then select according lightning conditions.</p>";
+  webPage += "<form action='hue'><form> Hue (temporary, 0-360 deg): <input type='number' name='value' min='0' max='360' step='1' value='0'><input type='submit' value='Submit'></form></form>";
+  webPage += "<form action='sat'><form> Saturation (temporary, 0-100 %): <input type='number' name='value' min='0' max='100' step='1' value='100'><input type='submit' value='Submit'></form></form>";
+  webPage += "<p>Save current color permanently: <a href=\"store_color\"><button>Submit</button></a></p>";
+  webPage += "<form action='brightness'>Brightness (temporary, 5 % step): <input type='radio' name='state' value='1'>Increase <input type='radio' name='state' value='0'>Decrease <input type='submit' value='Submit'></form>";
+  webPage += "<form action='calib_brightness'>Calibrate brightness: <input type='radio' name='state' value='1'>Bright room <input type='radio' name='state' value='0'>Dark room <input type='submit' value='Submit'></form>";
+  webPage += "<form action='ambilight'>Ambilight: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "<p>LED test: <a href=\"led_test\"><button>Submit</button></a></p>";
+
+  // Nighttime
+  webPage += "<h2>Night-time</h2>";
+  webPage += "<p>The LEDs are switched off during the specified night-time.<br>";
+  webPage += "Selecting the same start and end time disables night-time mode.</p>";
+  webPage += "<form action='night_start'><form> Start of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='1'><input type='submit' value='Submit'></form></form>";
+  webPage += "<form action='night_end'><form> End of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='7'><input type='submit' value='Submit'></form></form>";
+  webPage += "<form action='disable_nighttime_temp'>Disable night-time temporarily: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form></p>";
+
+  // Other settings
+  webPage += "<h2>Other settings</h2>";
+  webPage += "<form action='language'>Language: <select name='language'><option value='0'>German</option><option value='1'>English</option></select><input type='submit' value='Submit'></form>";
+  webPage += "<form action='disp_oclock'>Display 'o'clock': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "<form action='disp_it_is'>Display 'It is': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "<form action='disp_single_min'>Corner LEDs for single minutes: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "Show current date (day): <a href=\"day_of_month\"><button>Submit</button></a>";
 
   pixels.begin(); // This initializes the NeoPixel library.
 
@@ -313,113 +324,110 @@ void setup() {
     server.send(200, "text/html", webPage);
   });
 
-  server.on("/day_of_month", []() {
+  server.on("/hue", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Displaying day of month");
-    show_day();
+    int state = server.arg("value").toInt();
+    state = map(state, 0, 360, 0, 100);
+    h_clock = double(state) / 100;
+    h_ambilight = h_clock;
+    // Convert to RGB
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    settings_changed = true;
+    Serial.print("LED hue is now: ");
+    Serial.print(h_clock);
+    Serial.println(" / 1");
+    delay(1000);
+  });
+
+  server.on("/sat", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("value").toInt();
+    s_clock = (double) state / 100;
+    s_ambilight = s_clock;
+    // Convert to RGB
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    settings_changed = true;
+    Serial.print("LED saturation is now: ");
+    Serial.print(s_clock);
+    Serial.println(" / 1");
+    delay(1000);
+  });
+
+  server.on("/store_color", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Saving hue and saturation values in EEPROM");
+    byte temp = (int) (h_clock * 100);
+    EEPROM.write(EEPROM_addr_h_clock, temp);
+    Serial.print("Hue: ");
+    Serial.println(temp);
+    temp = (int) (s_clock * 100);
+    EEPROM.write(EEPROM_addr_s_clock, temp);
+    Serial.print("Saturation: ");
+    Serial.println(temp);
+    EEPROM.commit();
+    delay(1000);
+  });
+ 
+  server.on("/brightness", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+    
+    if (state == 1) {
+      Serial.print("Increasing LED brightness to ");
+      v_clock += hsv_value_inc;
+    }
+    else {
+      Serial.print("Decreasing LED brightness to ");
+      v_clock -= hsv_value_inc;
+    }
+
+    v_clock = constrain(v_clock, 0, 1);
+    v_ambilight = v_clock;
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    Serial.print(v_clock);
+    Serial.println("");
     settings_changed = true;
     delay(1000);
   });
 
-  server.on("/disp_temp", []() {
+  server.on("/calib_brightness", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Current temperature: XX");
-    //    settings_changed = true;
-    delay(1000);
-  });
-
-  server.on("/language_ger", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Language: German");
-    if (language) {
-      EEPROM.write(EEPROM_addr_language, 0);
-      EEPROM.commit();
-      language = false;
-      settings_changed = true;
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Calibrate brightness for bright room");
+      set_max_brightness();
     }
-    delay(1000);
-  });
-
-  server.on("/language_en", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Language: English");
-    if (!language) {
-      EEPROM.write(EEPROM_addr_language, 1);
-      EEPROM.commit();
-      language = true;
-      settings_changed = true;
+    else {
+      Serial.println("Calibrate brightness for dark room");
+      set_min_brightness();
     }
+    settings_changed = true;
     delay(1000);
   });
 
-  server.on("/uhr_on", []() {
+  server.on("/ambilight", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Display 'Uhr': on");
-    if (!en_uhr) {
-      EEPROM.write(EEPROM_addr_uhr, 1);
-      EEPROM.commit();
-      en_uhr = true;
-      settings_changed = true;
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Enable ambilight");
+      if (!en_ambilight) {
+        EEPROM.write(EEPROM_addr_ambilight, 1);
+        EEPROM.commit();
+        en_ambilight = true;
+        ambilight();
+      }
     }
-    delay(1000);
-  });
-
-  server.on("/uhr_off", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Display 'Uhr': on");
-    if (en_uhr) {
-      EEPROM.write(EEPROM_addr_uhr, 0);
-      EEPROM.commit();
-      en_uhr = false;
-      settings_changed = true;
-    }
-    delay(1000);
-  });
-
-  server.on("/es_ist_on", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Display 'Es ist': on");
-    if (!en_es_ist) {
-      EEPROM.write(EEPROM_addr_es_ist, 1);
-      EEPROM.commit();
-      en_es_ist = true;
-      settings_changed = true;
-    }
-    delay(1000);
-  });
-
-  server.on("/es_ist_off", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Display 'Es ist': off");
-    if (en_es_ist) {
-      EEPROM.write(EEPROM_addr_es_ist, 0);
-      EEPROM.commit();
-      en_es_ist = false;
-      settings_changed = true;
-    }
-    delay(1000);
-  });
-
-  server.on("/single_min_on", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Display single minute LEDs: on");
-    if (!en_single_min) {
-      EEPROM.write(EEPROM_addr_single_min, 1);
-      EEPROM.commit();
-      en_single_min = true;
-      settings_changed = true;
-    }
-    delay(1000);
-  });
-
-  server.on("/single_min_off", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Display single minute LEDs: off");
-    if (en_single_min) {
-      EEPROM.write(EEPROM_addr_single_min, 0);
-      EEPROM.commit();
-      en_single_min = false;
-      settings_changed = true;
+    else {
+      Serial.println("Disable ambilight");
+      if (en_ambilight) {
+        EEPROM.write(EEPROM_addr_ambilight, 0);
+        EEPROM.commit();
+        en_ambilight = false;
+        disable_ambilight();
+      }
     }
     delay(1000);
   });
@@ -431,109 +439,163 @@ void setup() {
     settings_changed = true;
     delay(1000);
   });
-
-  server.on("/inc_brightness", []() {
+  
+  server.on("/night_start", []() {
     server.send(200, "text/html", webPage);
-    Serial.print("Increasing LED brightness to ");
-    v_clock += hsv_value_inc;
-    v_clock = constrain(v_clock, 0, 1);
-    v_ambilight = v_clock;
-    // Convert to RGB
-    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    Serial.print(v_clock);
-    Serial.println("");
-    settings_changed = true;
+    int state = server.arg("value").toInt();
+    t_night_1 = state;
+    EEPROM.write(EEPROM_addr_t_night_1, t_night_1);
+    EEPROM.commit();
+    Serial.print("Starting night-time at: ");
+    Serial.print(t_night_1);
+    Serial.println(" h");
     delay(1000);
   });
 
-  server.on("/dec_brightness", []() {
+  server.on("/night_end", []() {
     server.send(200, "text/html", webPage);
-    Serial.print("Decreasing LED brightness to ");
-    v_clock -= hsv_value_inc;
-    v_clock = constrain(v_clock, 0, 1);
-    v_ambilight = v_clock;
-    // Convert to RGB
-    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    Serial.print(v_clock);
-    Serial.println("");
-    settings_changed = true;
+    int state = server.arg("value").toInt();
+    t_night_2 = state;
+    EEPROM.write(EEPROM_addr_t_night_2, t_night_2);
+    EEPROM.commit();
+    Serial.print("Ending night-time at: ");
+    Serial.print(t_night_2);
+    Serial.println(" h");
     delay(1000);
   });
 
-  server.on("/calib_bright", []() {
+  server.on("/language", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Brightness for bright room calibrated");
-    set_max_brightness();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  server.on("/calib_dark", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Brightness for dark room calibrated");
-    set_min_brightness();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  server.on("/ambilight_on", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Enable ambilight");
-    if (!en_ambilight) {
-      EEPROM.write(EEPROM_addr_ambilight, 1);
-      EEPROM.commit();
-      en_ambilight = true;
-      ambilight();
+    int state = server.arg("language").toInt();
+    if (state == 0) {
+      Serial.println("Language: German");
+      if (language) {
+        EEPROM.write(EEPROM_addr_language, 0);
+        EEPROM.commit();
+        language = false;
+        settings_changed = true;
+      }
+    }
+    else {
+      if (!language) {
+        EEPROM.write(EEPROM_addr_language, 1);
+        EEPROM.commit();
+        language = true;
+        settings_changed = true;
+      }
     }
     delay(1000);
   });
 
-  server.on("/ambilight_off", []() {
+  server.on("/disp_oclock", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Disable ambilight");
-    if (en_ambilight) {
-      EEPROM.write(EEPROM_addr_ambilight, 0);
-      EEPROM.commit();
-      en_ambilight = false;
-      disable_ambilight();
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Display 'o'clock' enabled");
+      if (!en_oclock) {
+        EEPROM.write(EEPROM_addr_uhr, 1);
+        EEPROM.commit();
+        en_oclock = true;
+        settings_changed = true;
+      }
+    }
+    else {
+      Serial.println("Display 'o'clock' disabled");
+      if (en_oclock) {
+        EEPROM.write(EEPROM_addr_uhr, 0);
+        EEPROM.commit();
+        en_oclock = false;
+        settings_changed = true;
+      }
     }
     delay(1000);
   });
 
-  server.on("/nighttime_on", []() {
+  server.on("/disp_it_is", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Enable nighttime");
-    if (!en_nighttime) {
-      en_nighttime = 1;
-      settings_changed = true;
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Display 'it is' enabled");
+      if (!en_it_is) {
+        EEPROM.write(EEPROM_addr_es_ist, 1);
+        EEPROM.commit();
+        en_it_is = true;
+        settings_changed = true;
+      }
+    }
+    else {
+      Serial.println("Display 'it is' disabled");
+      if (en_it_is) {
+        EEPROM.write(EEPROM_addr_es_ist, 0);
+        EEPROM.commit();
+        en_it_is = false;
+        settings_changed = true;
+      }
     }
     delay(1000);
   });
 
-  server.on("/nighttime_off", []() {
+  server.on("/disp_single_min", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Disable nighttime");
-    if (en_nighttime) {
-      en_nighttime = 0;
-      settings_changed = true;
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Display single minute LEDs: on");
+      if (!en_single_min) {
+        EEPROM.write(EEPROM_addr_single_min, 1);
+        EEPROM.commit();
+        en_single_min = true;
+        settings_changed = true;
+      }
     }
+    else {
+      Serial.println("Display single minute LEDs: off");
+      if (en_single_min) {
+        EEPROM.write(EEPROM_addr_single_min, 0);
+        EEPROM.commit();
+        en_single_min = false;
+        settings_changed = true;
+      }
+    }
+    delay(1000);
+  });
+
+  server.on("/disable_nighttime_temp", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Disable night-time temporarily");
+      if (en_nighttime) {
+        en_nighttime = 0;
+        settings_changed = true;
+      }
+    }
+    else {
+      Serial.println("Enable night-time");
+      if (!en_nighttime) {
+        en_nighttime = 1;
+        settings_changed = true;
+      }
+    }
+    delay(1000);
+  });
+
+  server.on("/day_of_month", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Displaying day of month");
+    show_day();
+    settings_changed = true;
     delay(1000);
   });
 
   server.begin();
   Serial.println("HTTP server started");
 
-  // getWeatherData();
-  //  get_brightness();
-
 }
 
 time_t prevDisplay = 0; // when the digital clock was displayed
 
-byte temp = 0;
-byte temp_max_index = 0;
+// byte temp = 0;
+// byte temp_max_index = 0;
 
 ////////////////////////////////////////////////////
 // Main loop
@@ -604,20 +666,20 @@ void clock_display() {
   else
     hours = hours % 12; // hours modulo 12
 
-  // Hier zwischen Sprachen wechseln
+  // Output time depending on language
   switch (language) {
 
     // German
     case 0:
 
       // Display "es ist"
-      if (en_es_ist)
+      if (en_it_is)
         send_time_2_LED(es_ist);
 
       switch (min_five) {
         case 0:
           send_time_2_LED(full_hours_GER[hours]);
-          if (en_uhr) send_time_2_LED(uhr);
+          if (en_oclock) send_time_2_LED(uhr);
           break;
         case 5:
           send_time_2_LED(fuenf_min);
@@ -690,13 +752,13 @@ void clock_display() {
     case 1:
 
       // Display "it is"
-      if (en_es_ist)
+      if (en_it_is)
         send_time_2_LED(it_is);
 
       switch (min_five) {
         case 0:
           send_time_2_LED(hours_EN[hours]);
-          if (en_uhr) send_time_2_LED(oclock);
+          if (en_oclock) send_time_2_LED(oclock);
           break;
         case 5:
           send_time_2_LED(five_min);
@@ -778,14 +840,6 @@ void send_time_2_LED(byte x[]) {
       pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
   }
 
-  // For debugging:
-  //Serial.print("LED color: R: ");
-  //Serial.print(pgm_read_byte(&gamma8[clock_rgb[0]]));
-  //Serial.print(", G: ");
-  //Serial.print(pgm_read_byte(&gamma8[clock_rgb[1]]));
-  //Serial.print(", B: ");
-  //Serial.println(pgm_read_byte(&gamma8[clock_rgb[2]]));
-  //
   //Serial.print("LED color: H: ");
   //Serial.print(h_clock);
   //Serial.print(", S: ");
@@ -818,18 +872,11 @@ void disable_clock_led() {
 // Enable ambilight LEDs
 ////////////////////////////////////////////////////
 void ambilight() {
-  // Fade colors
-  //if(led == 49) { led = 0; ambimode++; } else { led++; }
-  //if(ambimode == 25) { ambimode = 0; }
-  //pixels.setPixelColor(led + 114, pixels.Color(255-(10 * ambimode), 10 * ambimode, 255-(10 * ambimode)));
-
-  // Static color
   for (byte i = 114; i <= 170; i++) {
     // pixels.setPixelColor(i - 1, pixels.Color(R_ambilight, G_ambilight, B_ambilight));
     pixels.setPixelColor(i - 1, pgm_read_byte(&gamma8[ambilight_rgb[0]]), pgm_read_byte(&gamma8[ambilight_rgb[1]]), pgm_read_byte(&gamma8[ambilight_rgb[2]]));
   }
   pixels.show();
-
 }
 
 ////////////////////////////////////////////////////
@@ -840,7 +887,6 @@ void disable_ambilight() {
     pixels.setPixelColor(i, pixels.Color(0, 0, 0));
   }
   pixels.show();
-
 }
 
 ////////////////////////////////////////////////////
@@ -858,10 +904,6 @@ void disable_all_led() {
 ////////////////////////////////////////////////////
 void serial_clock_display()
 {
-  // IP for webserver access
-  // Serial.print("IP for web server is ");
-  // Serial.println(WiFi.localIP());
-
   // digital clock display of the time
   Serial.print("Current time and date: ");
   Serial.print(hour());
@@ -892,7 +934,7 @@ void printDigits(int digits)
 
 ////////////////////////////////////////////////////
 // Check whether the specfied nighttime is active
-// If t_night_1 = t_night_2, then false is always returned
+// If t_night_1 = t_night_2, then "false" is always returned
 // Nighttime can only be disabled locally, i.e. during the current night
 // By default it is always enabled
 ////////////////////////////////////////////////////
@@ -1133,7 +1175,8 @@ void set_min_brightness() {
   sensorValue = constrain(sensorValue, 0, 1023);
   sensorValue = pgm_read_word(&LDR_correction[sensorValue]);
 
-  EEPROM.write(EEPROM_addr_min_user_brightness, v_clock * 100); // Min brightness set by user
+  byte temp = (int) (v_clock * 100);
+  EEPROM.write(EEPROM_addr_min_user_brightness, temp); // Min brightness set by user
   EEPROMWriteInt(EEPROM_addr_LDR_min, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
@@ -1149,7 +1192,8 @@ void set_max_brightness() {
   sensorValue = constrain(sensorValue, 0, 1023);
   sensorValue = pgm_read_word(&LDR_correction[sensorValue]);
 
-  EEPROM.write(EEPROM_addr_max_user_brightness, v_clock * 100); // Max brightness set by user
+  byte temp = (int) (v_clock * 100);  
+  EEPROM.write(EEPROM_addr_max_user_brightness, temp); // Max brightness set by user
   EEPROMWriteInt(EEPROM_addr_LDR_max, sensorValue); // Correspondig LDR value
   EEPROM.commit();
 
@@ -1171,7 +1215,8 @@ void test_numbers() {
 }
 
 ////////////////////////////////////////////////////
-// This function will write a 2 byte integer to the eeprom at the specified address and address + 1
+// This function writes a 2 byte integer to the eeprom at 
+// the specified address and address + 1
 ////////////////////////////////////////////////////
 void EEPROMWriteInt(int p_address, int p_value)
 {
@@ -1183,7 +1228,8 @@ void EEPROMWriteInt(int p_address, int p_value)
 }
 
 ////////////////////////////////////////////////////
-// This function will read a 2 byte integer from the eeprom at the specified address and address + 1
+// This function reads a 2 byte integer from the eeprom at 
+// the specified address and address + 1
 ////////////////////////////////////////////////////
 unsigned int EEPROMReadInt(int p_address)
 {
@@ -1191,226 +1237,6 @@ unsigned int EEPROMReadInt(int p_address)
   byte highByte = EEPROM.read(p_address + 1);
 
   return ((lowByte << 0) & 0xFF) + ((highByte << 8) & 0xFF00);
-}
-
-//  //  read temperature from somewhere
-//  //  % Determine conservative temperature, quantisation: 3°C
-//  byte temp_array[11] = {18, 20, 25, 19, 10, 12, 14, 16, 18, 20, 22};
-//  byte weather_type[11] = {1, 2, 4, 3, 10, 3, 14, 16, 18, 20, 22};
-//
-//  // Display temperature and weather
-//  for (byte i = 0; i <= 10; i++) {
-//    temp = temp_array[i];
-//    temp = constrain(temp, -3, 24); // Temperatur range: -3...25 °C
-//    temp = temp + 3; // shift such that -3 °C has index 0
-//    temp = temp - temp % 3;
-//    temp_max_index = temp / 3; // LED with largest index
-//    // Display temperature and weather type
-//    for (byte j = 0; j <= temp_max_index; j++) {
-//      pixels.setPixelColor(LED_matrix[i][j], pixels.Color(weather_color[weather_type[i]][1], weather_color[weather_type[i]][2], weather_color[weather_type[i]][3]));
-//    }
-//  }
-
-
-//// Get data from Openweathermap
-//void getWeatherData() //client function to send/receive GET request data.
-//{
-//
-//  WiFiClient client;
-//  char servername[] = "api.openweathermap.org"; // remote server we will connect to
-//  String result;
-//
-//  String CityID = "3220838"; // Munich
-//  String APIKEY = "";
-//
-//  if (client.connect(servername, 80)) {  //starts client connection, checks for connection
-//    client.println("GET /data/2.5/weather?id=" + CityID + "&units=metric&APPID=" + APIKEY);
-//    client.println("Host: api.openweathermap.org");
-//    client.println("User-Agent: ArduinoWiFi/1.1");
-//    client.println("Connection: close");
-//    client.println();
-//  }
-//  else {
-//    Serial.println("connection failed"); //error message if no client connect
-//    Serial.println();
-//  }
-//
-//  while (client.connected() && !client.available()) delay(1); //waits for data
-//  while (client.connected() || client.available()) { //connected or data available
-//    char c = client.read(); //gets byte from ethernet buffer
-//    result = result + c;
-//  }
-//
-//  client.stop(); //stop client
-//  result.replace('[', ' ');
-//  result.replace(']', ' ');
-//  Serial.println(result);
-//
-//  char jsonArray [result.length() + 1];
-//  result.toCharArray(jsonArray, sizeof(jsonArray));
-//  jsonArray[result.length() + 1] = '\0';
-//
-//  StaticJsonBuffer<1024> json_buf;
-//  JsonObject &root = json_buf.parseObject(jsonArray);
-//  if (!root.success())
-//  {
-//    Serial.println("parseObject() failed");
-//  }
-//
-//  // Example:
-//  // {"coord":{"lon":11.64,"lat":48.05},
-//  // "weather":{"id":800,"main":"Clear","description":"clear sky","icon":"01d"} ,
-//  // "base":"cmc stations",
-//  // "main":{"temp":29.38,"pressure":1018,"humidity":39,"temp_min":27.22,"temp_max":32.22},
-//  // "wind":{"speed":2.6,"deg":120},"clouds":{"all":0},"dt":1469020873,
-//  // "sys":{"type":3,"id":4887,"message":0.0034,"country":"DE","sunrise":1468985746,"sunset":1469041395},
-//  // "id":3220838,
-//  // "name":"Landkreis München",
-//  // "cod":200}
-//
-//  String location = root["name"];
-//  String country = root["sys"]["country"];
-//  float temperature = root["main"]["temp"];
-//  float humidity = root["main"]["humidity"];
-//  String weather = root["weather"]["main"];
-//  String description = root["weather"]["description"];
-//  float pressure = root["main"]["pressure"];
-//
-//  Serial.println("Weather:");
-//  Serial.println(description);
-//  Serial.println(location);
-//  Serial.println(country);
-//  Serial.println(temperature);
-//  Serial.println(humidity);
-//  Serial.println(pressure);
-//
-//}
-
-////////////////////////////////////////////////////
-// Get historic weather data for certain date from Wunderground
-////////////////////////////////////////////////////
-void getWeatherData()
-{
-  WiFiClient client;
-  String result;
-
-  if (client.connect(weather_host, 80)) {  //starts client connection, checks for connection
-
-    // Convert day to format DD
-    String day_str;
-    if (day() < 10) {
-      day_str = "0";
-      day_str += String(day());
-    }
-    else {
-      day_str = String(day());
-    }
-
-    // Convert day to format MM
-    String month_str;
-    if (month() < 10) {
-      month_str = "0";
-      month_str += String(month());
-    }
-    else {
-      month_str = String(month());
-    }
-
-    // Request history current day
-    //    String request;
-    //    request += "GET /api/";
-    //    request += APIKEY;
-    //    request += "/history_";
-    //    request += String(year());
-    //    request += month_str;
-    //    request += day_str;
-    //    request += "/q/";
-    //    request += COUNTRY;
-    //    request += "/";
-    //    request += CITY;
-    //    request += ".json HTTP/1.1";
-
-    // Request current conditions
-    String request;
-    request += "GET /api/";
-    request += APIKEY;
-    request += "/conditions";
-    request += "/q/";
-    request += COUNTRY;
-    request += "/";
-    request += CITY;
-    request += ".json HTTP/1.1";
-
-    Serial.println(request);
-
-    client.println(request);
-    client.println("Host: api.wunderground.com");
-    client.println("Connection: close");
-    client.println();
-  }
-  else {
-    Serial.println("connection failed"); //error message if no client connect
-    Serial.println();
-  }
-
-  while (client.connected() && !client.available()) delay(1); //waits for data
-  while (client.connected() || client.available()) { //connected or data available
-    char c = client.read(); //gets byte from ethernet buffer
-    result = result + c;
-  }
-
-  client.stop(); //stop client
-  //  result.replace('[', ' ');
-  //  result.replace(']', ' ');
-  //  Serial.println(result); // Computationally expensive
-
-  Serial.print("Result length: ");
-  Serial.println(result.length() + 1);
-
-  char jsonArray [result.length() + 1];
-  result.toCharArray(jsonArray, sizeof(jsonArray));
-  jsonArray[result.length() + 1] = '\0';
-  //
-  //  StaticJsonBuffer<4096> json_buf;
-  //  JsonObject &root = json_buf.parseObject(jsonArray);
-  //  if (!root.success())
-  //  {
-  //    Serial.println("parseObject() failed");
-  //  }
-  //
-  //  byte mday_res = root["history"]["observations"][0]["date"]["mday"];
-  //  byte mon_res = root["history"]["observations"][0]["date"]["mon"];
-  //  int year_res = root["history"]["observations"][0]["date"]["year"];
-  //  byte hour_res = root["history"]["observations"][0]["date"]["hour"];
-  //  byte min_res = root["history"]["observations"][0]["date"]["min"];
-  //  float temp_res = root["history"]["observations"][0]["tempm"];
-
-  //  Serial.println("Observation hour 0:");
-  //  Serial.print(mday_res);
-  //  Serial.print("-");
-  //  Serial.print(mon_res);
-  //  Serial.print("-");
-  //  Serial.print(year_res);
-  //  Serial.println("");
-  //
-  //  Serial.print(hour_res);
-  //  Serial.print(":");
-  //  Serial.print(min_res);
-  //  Serial.println("");
-  //
-  //  Serial.print("Temperature: ");
-  //  Serial.println(temp_res);
-
-  //  // Select 11*2h temperature forecast
-  //  for (byte i = 0; i <= 10; i++) {
-  //    temp_forecast[i] = root["hourly"]["data"][2 * i]["temperature"];
-  //  }
-
-  //  String timeZone = root["timezone"];
-
-  //display_temp_forecast();
-  //Serial.println("Weather:");
-
 }
 
 // LED gamma correction
