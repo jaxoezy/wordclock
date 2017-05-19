@@ -1,21 +1,43 @@
-Word Clock based on Wemos D1 mini
+Word Clock based on Wemos D1 mini / ESP8266
 
 Features:
 - LEDs
-  o Control of WS2812B LED strip
-  o Ambilight
-  o Color in HSV
-  o Brightness adjusted by LDR
+  - Control of WS2812B LED strip
+  - Ambilight
+  - Color in HSV
+  - Brightness adjusted by LDR
+  
+- Time
+  - Obtained by NTP
+  - Wifimanager used to connect to Wifi
   
 - Webserver: 
-  o All parameters can be set with simple http server
-  o Wifimanager used to connect to Wifi
-  o Access to web server: Type wordclock.local in your browser
+  - All parameters can be set with simple web server
+  - Access to web server: Type wordclock.local in your browser
   
 - Night-time:
-  o Word clock LEDs can be switched off at night
-  o Start and end time can be set manually
+  - Word clock LEDs can be switched off at night
+  - Start and end time can be set manually
   
 - Others
-  o Language: German/English
-  o Display of current date
+  - Language: German/English
+  - Display of current date
+  
+Wiring:
+  
+- LED IDs:
+  - Rows from top to bottom:
+  - 1-11
+  - 22-12
+  - 23-33
+  - 44-34
+  - 45-55
+  - 66-56
+  - 67-77
+  - 88-78
+  - 89-99
+  - 110-100
+  - All remaining LEDs belong to ambilight
+
+- LDR:
+  - 5V —— LDR —— A0 —— 10k —— GND
