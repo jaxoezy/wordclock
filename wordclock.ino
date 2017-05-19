@@ -12,7 +12,8 @@
 #include <RGBConverter.h>
 
 extern const uint8_t gamma8[];
-extern const uint16_t LDR_correction[];
+extern const uint16_t LDR_corr_log[];
+extern const uint16_t LDR_corr_sqrt[];
 
 // Set Pins
 #define PIN D1 // LED data pin
@@ -143,12 +144,14 @@ double min_user_brightness;
 double max_user_brightness;
 int min_LDR_value;
 int max_LDR_value;
+byte LDR_corr_type;
 byte en_it_is;
 byte en_oclock;
 byte en_single_min;
 byte en_ambilight;
 boolean settings_changed = false;
 int language;
+byte en_clock = 1;
 byte en_nighttime = 1;
 byte t_night_1;
 byte t_night_2;
@@ -177,6 +180,7 @@ const int EEPROM_addr_v_clock = 15;
 const int EEPROM_addr_h_ambilight = 16;
 const int EEPROM_addr_s_ambilight = 17;
 const int EEPROM_addr_v_ambilight = 18;
+const int EEPROM_addr_LDR_corr_type = 19;
 
 ////////////////////////////////////////////////////
 // Setup routine
@@ -197,7 +201,7 @@ void setup() {
   if (!wifiManager.autoConnect("Wordclock")) {
     Serial.println("failed to connect and hit timeout");
     // Reset and try again, or maybe put it to deep sleep
-    ESP.reset();
+    ESP.restart(); // originally ESP.reset()
     delay(1000);
   }
 
@@ -221,6 +225,7 @@ void setup() {
   //  EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
   //  EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
   //  EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
+  //  EEPROM.write(EEPROM_addr_LDR_corr_type, 0); // LDR correction type, default: 0
   //  EEPROM.commit();
 
   // Read settings from EEPROM
@@ -251,6 +256,7 @@ void setup() {
   h_ambilight = constrain(h_ambilight, 0, 1);
   s_ambilight = constrain(s_ambilight, 0, 1);
   v_ambilight = constrain(v_ambilight, 0, 1);
+  LDR_corr_type = EEPROM.read(EEPROM_addr_LDR_corr_type);
 
   // Convert HSV to RGB
   rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
@@ -272,7 +278,12 @@ void setup() {
   webPage += "<h1>Wordclock web server</h1>";
   webPage += "<p>Unless stated otherwise, all settings are stored permanently.</p>";
 
-  // LED color
+  webPage += "<h2>General</h2>";
+  webPage += "<p>Reset: <a href=\"reset\"><button>Submit</button></a></p>";
+  webPage += "<form action='leds_on_off'>Clock LEDs (temporary): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "<form action='ambilight'>Ambilight: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+
+  // LED color & brightness
   webPage += "<h2>LED color & brightness</h2>";
   webPage += "<p>HSV format is used for LEDs colors. Check <a href='http://colorizer.org' target='_blank'>Colorizer</a> (HSV/HSB).<br>";
   webPage += "For brightness calibration, first adjust brightness manually and then select according lightning conditions.</p>";
@@ -281,8 +292,8 @@ void setup() {
   webPage += "<p>Save current color permanently: <a href=\"store_color\"><button>Submit</button></a></p>";
   webPage += "<form action='brightness'>Brightness (temporary, 5 % step): <input type='radio' name='state' value='1'>Increase <input type='radio' name='state' value='0'>Decrease <input type='submit' value='Submit'></form>";
   webPage += "<form action='calib_brightness'>Calibrate brightness: <input type='radio' name='state' value='1'>Bright room <input type='radio' name='state' value='0'>Dark room <input type='submit' value='Submit'></form>";
-  webPage += "<form action='ambilight'>Ambilight: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
   webPage += "<p>LED test: <a href=\"led_test\"><button>Submit</button></a></p>";
+  webPage += "<form action='LDR_corr_type'>Correction light measurement: <select name='LDR_corr_type'><option value='0'>None (linear)</option><option value='1'>Square root</option><option value='2'>Logarithmic</option></select><input type='submit' value='Submit'></form>";
 
   // Nighttime
   webPage += "<h2>Night-time</h2>";
@@ -290,7 +301,7 @@ void setup() {
   webPage += "Selecting the same start and end time disables night-time mode.</p>";
   webPage += "<form action='night_start'><form> Start of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='1'><input type='submit' value='Submit'></form></form>";
   webPage += "<form action='night_end'><form> End of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='7'><input type='submit' value='Submit'></form></form>";
-  webPage += "<form action='disable_nighttime_temp'>Disable night-time temporarily: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form></p>";
+  webPage += "<form action='disable_nighttime_temp'>Night-time (temporary): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form></p>";
 
   // Other settings
   webPage += "<h2>Other settings</h2>";
@@ -324,90 +335,34 @@ void setup() {
     server.send(200, "text/html", webPage);
   });
 
-  server.on("/hue", []() {
+  /////////////////////////////////////
+  // Server: General
+  /////////////////////////////////////
+
+  // Reset
+  server.on("/reset", []() {
     server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    state = map(state, 0, 360, 0, 100);
-    h_clock = double(state) / 100;
-    h_ambilight = h_clock;
-    // Convert to RGB
-    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    settings_changed = true;
-    Serial.print("LED hue is now: ");
-    Serial.print(h_clock);
-    Serial.println(" / 1");
-    delay(1000);
+    Serial.println("Resetting word clock");
+    ESP.reset();
   });
 
-  server.on("/sat", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    s_clock = (double) state / 100;
-    s_ambilight = s_clock;
-    // Convert to RGB
-    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    settings_changed = true;
-    Serial.print("LED saturation is now: ");
-    Serial.print(s_clock);
-    Serial.println(" / 1");
-    delay(1000);
-  });
-
-  server.on("/store_color", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Saving hue and saturation values in EEPROM");
-    byte temp = (int) (h_clock * 100);
-    EEPROM.write(EEPROM_addr_h_clock, temp);
-    Serial.print("Hue: ");
-    Serial.println(temp);
-    temp = (int) (s_clock * 100);
-    EEPROM.write(EEPROM_addr_s_clock, temp);
-    Serial.print("Saturation: ");
-    Serial.println(temp);
-    EEPROM.commit();
-    delay(1000);
-  });
- 
-  server.on("/brightness", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    
-    if (state == 1) {
-      Serial.print("Increasing LED brightness to ");
-      v_clock += hsv_value_inc;
-    }
-    else {
-      Serial.print("Decreasing LED brightness to ");
-      v_clock -= hsv_value_inc;
-    }
-
-    v_clock = constrain(v_clock, 0, 1);
-    v_ambilight = v_clock;
-    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    Serial.print(v_clock);
-    Serial.println("");
-    settings_changed = true;
-    delay(1000);
-  });
-
-  server.on("/calib_brightness", []() {
+  // Enable/Disable clock LEDs temporarily
+  server.on("/clock_leds", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("state").toInt();
     if (state == 1) {
-      Serial.println("Calibrate brightness for bright room");
-      set_max_brightness();
+      Serial.println("Enable clock LEDs");
+      en_clock = true;
     }
     else {
-      Serial.println("Calibrate brightness for dark room");
-      set_min_brightness();
+      Serial.println("Disable clock LEDs");
+      en_clock = false;
     }
     settings_changed = true;
     delay(1000);
   });
 
+  // Enable/Disable ambilight
   server.on("/ambilight", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("state").toInt();
@@ -432,6 +387,100 @@ void setup() {
     delay(1000);
   });
 
+  /////////////////////////////////////
+  // Server: LED color & brightness
+  /////////////////////////////////////
+
+  // Select hue
+  server.on("/hue", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("value").toInt();
+    state = map(state, 0, 360, 0, 100);
+    h_clock = double(state) / 100;
+    h_ambilight = h_clock;
+    // Convert to RGB
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    settings_changed = true;
+    Serial.print("LED hue is now: ");
+    Serial.print(h_clock);
+    Serial.println(" / 1");
+    delay(1000);
+  });
+
+  // Select saturation
+  server.on("/sat", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("value").toInt();
+    s_clock = (double) state / 100;
+    s_ambilight = s_clock;
+    // Convert to RGB
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    settings_changed = true;
+    Serial.print("LED saturation is now: ");
+    Serial.print(s_clock);
+    Serial.println(" / 1");
+    delay(1000);
+  });
+
+  // Store current color to EEPROM
+  server.on("/store_color", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Saving hue and saturation values in EEPROM");
+    byte temp = (int) (h_clock * 100);
+    EEPROM.write(EEPROM_addr_h_clock, temp);
+    Serial.print("Hue: ");
+    Serial.println(temp);
+    temp = (int) (s_clock * 100);
+    EEPROM.write(EEPROM_addr_s_clock, temp);
+    Serial.print("Saturation: ");
+    Serial.println(temp);
+    EEPROM.commit();
+    delay(1000);
+  });
+
+  // Set brightness
+  server.on("/brightness", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+
+    if (state == 1) {
+      Serial.print("Increasing LED brightness to ");
+      v_clock += hsv_value_inc;
+    }
+    else {
+      Serial.print("Decreasing LED brightness to ");
+      v_clock -= hsv_value_inc;
+    }
+
+    v_clock = constrain(v_clock, 0, 1);
+    v_ambilight = v_clock;
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    Serial.print(v_clock);
+    Serial.println("");
+    settings_changed = true;
+    delay(1000);
+  });
+
+  // Calibrate bright/dark room
+  server.on("/calib_brightness", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Calibrate brightness for bright room");
+      set_max_brightness();
+    }
+    else {
+      Serial.println("Calibrate brightness for dark room");
+      set_min_brightness();
+    }
+    settings_changed = true;
+    delay(1000);
+  });
+
+  // LED test
   server.on("/led_test", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Testing all LEDs");
@@ -439,7 +488,23 @@ void setup() {
     settings_changed = true;
     delay(1000);
   });
+
+  // Set language
+  server.on("/LDR_corr_type", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("LDR_corr_type").toInt();
+    LDR_corr_type = state;
+    EEPROM.write(EEPROM_addr_LDR_corr_type, LDR_corr_type);
+    EEPROM.commit();
+    settings_changed = true;
+    delay(1000);
+  });
   
+  /////////////////////////////////////
+  // Server: Night-time
+  /////////////////////////////////////
+
+  // Start of night-time
   server.on("/night_start", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("value").toInt();
@@ -452,6 +517,7 @@ void setup() {
     delay(1000);
   });
 
+  // End of night-time
   server.on("/night_end", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("value").toInt();
@@ -464,6 +530,32 @@ void setup() {
     delay(1000);
   });
 
+  // Enable/Disable night-time temporarily
+  server.on("/disable_nighttime_temp", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Disable night-time temporarily");
+      if (en_nighttime) {
+        en_nighttime = 0;
+        settings_changed = true;
+      }
+    }
+    else {
+      Serial.println("Enable night-time");
+      if (!en_nighttime) {
+        en_nighttime = 1;
+        settings_changed = true;
+      }
+    }
+    delay(1000);
+  });
+
+  /////////////////////////////////////
+  // Server: Other settings
+  /////////////////////////////////////
+
+  // Set language
   server.on("/language", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("language").toInt();
@@ -487,6 +579,7 @@ void setup() {
     delay(1000);
   });
 
+  // Enable/Disable "o'clock"
   server.on("/disp_oclock", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("state").toInt();
@@ -511,6 +604,7 @@ void setup() {
     delay(1000);
   });
 
+  // Enable/Disable "It is"
   server.on("/disp_it_is", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("state").toInt();
@@ -535,6 +629,7 @@ void setup() {
     delay(1000);
   });
 
+  // Enable/Disable single minute LEDs
   server.on("/disp_single_min", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("state").toInt();
@@ -559,26 +654,7 @@ void setup() {
     delay(1000);
   });
 
-  server.on("/disable_nighttime_temp", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Disable night-time temporarily");
-      if (en_nighttime) {
-        en_nighttime = 0;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Enable night-time");
-      if (!en_nighttime) {
-        en_nighttime = 1;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
+  // Show current day of month
   server.on("/day_of_month", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Displaying day of month");
@@ -587,15 +663,12 @@ void setup() {
     delay(1000);
   });
 
-  server.begin();
+  server.begin();  
   Serial.println("HTTP server started");
 
 }
 
 time_t prevDisplay = 0; // when the digital clock was displayed
-
-// byte temp = 0;
-// byte temp_max_index = 0;
 
 ////////////////////////////////////////////////////
 // Main loop
@@ -612,7 +685,7 @@ void loop() {
       if ((minute() != prevDisplay || settings_changed)) { // Alternative: now()
 
         // Check whether nighttime is active
-        if (!nighttime()) {
+        if (!nighttime() && en_clock) {
 
           // Determine LED brightness based on LDR measurement
           get_brightness();
@@ -634,9 +707,12 @@ void loop() {
 
       }
     }
+    else {
+      Serial.println("Time not set");
+    }
   }
   else
-    ESP.reset();
+    ESP.restart();
 }
 
 
@@ -1132,10 +1208,7 @@ void get_brightness() {
   // Read LDR
   int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
   sensorValue = constrain(sensorValue, 0, 1023);
-
-  // LDR correction
-  sensorValue = pgm_read_word(&LDR_correction[sensorValue]);
-
+  sensorValue = LDR_correction(sensorValue);
   sensorValue = constrain(sensorValue, min_LDR_value, max_LDR_value);
 
   // Map sensor value
@@ -1173,7 +1246,7 @@ void set_min_brightness() {
   // Read the analog in value
   int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
   sensorValue = constrain(sensorValue, 0, 1023);
-  sensorValue = pgm_read_word(&LDR_correction[sensorValue]);
+  sensorValue = LDR_correction(sensorValue);
 
   byte temp = (int) (v_clock * 100);
   EEPROM.write(EEPROM_addr_min_user_brightness, temp); // Min brightness set by user
@@ -1186,17 +1259,39 @@ void set_min_brightness() {
 // Set maximum brightness
 ////////////////////////////////////////////////////
 void set_max_brightness() {
-
+  
   // Read the analog in value
   int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
   sensorValue = constrain(sensorValue, 0, 1023);
-  sensorValue = pgm_read_word(&LDR_correction[sensorValue]);
+  sensorValue = LDR_correction(sensorValue);
 
-  byte temp = (int) (v_clock * 100);  
+  byte temp = (int) (v_clock * 100);
   EEPROM.write(EEPROM_addr_max_user_brightness, temp); // Max brightness set by user
   EEPROMWriteInt(EEPROM_addr_LDR_max, sensorValue); // Correspondig LDR value
   EEPROM.commit();
+  
+}
 
+////////////////////////////////////////////////////
+// LDR correction
+////////////////////////////////////////////////////
+int LDR_correction(int sensorValue) {
+  
+  switch (LDR_corr_type) {
+  
+  case 0: // None
+    return sensorValue;
+    break;  
+  
+  case 1: // Square root
+    return pgm_read_word(&LDR_corr_sqrt[sensorValue]);
+    break;
+
+  case 2: // Logarithmic
+    return pgm_read_word(&LDR_corr_log[sensorValue]);
+    break;
+  }
+  
 }
 
 ////////////////////////////////////////////////////
@@ -1215,7 +1310,7 @@ void test_numbers() {
 }
 
 ////////////////////////////////////////////////////
-// This function writes a 2 byte integer to the eeprom at 
+// This function writes a 2 byte integer to the eeprom at
 // the specified address and address + 1
 ////////////////////////////////////////////////////
 void EEPROMWriteInt(int p_address, int p_value)
@@ -1228,7 +1323,7 @@ void EEPROMWriteInt(int p_address, int p_value)
 }
 
 ////////////////////////////////////////////////////
-// This function reads a 2 byte integer from the eeprom at 
+// This function reads a 2 byte integer from the eeprom at
 // the specified address and address + 1
 ////////////////////////////////////////////////////
 unsigned int EEPROMReadInt(int p_address)
@@ -1261,76 +1356,76 @@ const uint8_t PROGMEM gamma8[] = {
 
 // LDR correction (logarithm)
 // Function: y = log10(x+1)*1023/log10(1023+1);
-//const uint16_t PROGMEM LDR_correction[] = {
-//0, 102, 162, 204, 237, 264, 287, 306, 324, 339, 353, 366, 378, 389, 399, 409,
-//418, 426, 434, 442, 449, 456, 462, 469, 475, 480, 486, 491, 496, 501, 506, 511,
-//516, 520, 524, 528, 532, 536, 540, 544, 548, 551, 555, 558, 561, 565, 568, 571,
-//574, 577, 580, 583, 585, 588, 591, 594, 596, 599, 601, 604, 606, 609, 611, 613,
-//616, 618, 620, 622, 624, 627, 629, 631, 633, 635, 637, 639, 641, 642, 644, 646,
-//648, 650, 652, 653, 655, 657, 659, 660, 662, 664, 665, 667, 668, 670, 672, 673,
-//675, 676, 678, 679, 681, 682, 684, 685, 686, 688, 689, 691, 692, 693, 695, 696,
-//697, 699, 700, 701, 702, 704, 705, 706, 707, 709, 710, 711, 712, 713, 714, 716,
-//717, 718, 719, 720, 721, 722, 723, 725, 726, 727, 728, 729, 730, 731, 732, 733,
-//734, 735, 736, 737, 738, 739, 740, 741, 742, 743, 744, 745, 746, 747, 748, 749,
-//749, 750, 751, 752, 753, 754, 755, 756, 757, 757, 758, 759, 760, 761, 762, 763,
-//763, 764, 765, 766, 767, 768, 768, 769, 770, 771, 772, 772, 773, 774, 775, 775,
-//776, 777, 778, 778, 779, 780, 781, 781, 782, 783, 784, 784, 785, 786, 787, 787,
-//788, 789, 789, 790, 791, 791, 792, 793, 794, 794, 795, 796, 796, 797, 798, 798,
-//799, 800, 800, 801, 801, 802, 803, 803, 804, 805, 805, 806, 807, 807, 808, 808,
-//809, 810, 810, 811, 811, 812, 813, 813, 814, 814, 815, 816, 816, 817, 817, 818,
-//818, 819, 820, 820, 821, 821, 822, 822, 823, 824, 824, 825, 825, 826, 826, 827,
-//827, 828, 828, 829, 830, 830, 831, 831, 832, 832, 833, 833, 834, 834, 835, 835,
-//836, 836, 837, 837, 838, 838, 839, 839, 840, 840, 841, 841, 842, 842, 843, 843,
-//844, 844, 845, 845, 846, 846, 847, 847, 848, 848, 849, 849, 849, 850, 850, 851,
-//851, 852, 852, 853, 853, 854, 854, 854, 855, 855, 856, 856, 857, 857, 858, 858,
-//858, 859, 859, 860, 860, 861, 861, 862, 862, 862, 863, 863, 864, 864, 864, 865,
-//865, 866, 866, 867, 867, 867, 868, 868, 869, 869, 869, 870, 870, 871, 871, 871,
-//872, 872, 873, 873, 873, 874, 874, 875, 875, 875, 876, 876, 877, 877, 877, 878,
-//878, 879, 879, 879, 880, 880, 880, 881, 881, 882, 882, 882, 883, 883, 883, 884,
-//884, 885, 885, 885, 886, 886, 886, 887, 887, 887, 888, 888, 888, 889, 889, 890,
-//890, 890, 891, 891, 891, 892, 892, 892, 893, 893, 893, 894, 894, 894, 895, 895,
-//895, 896, 896, 896, 897, 897, 897, 898, 898, 899, 899, 899, 900, 900, 900, 900,
-//901, 901, 901, 902, 902, 902, 903, 903, 903, 904, 904, 904, 905, 905, 905, 906,
-//906, 906, 907, 907, 907, 908, 908, 908, 909, 909, 909, 909, 910, 910, 910, 911,
-//911, 911, 912, 912, 912, 913, 913, 913, 913, 914, 914, 914, 915, 915, 915, 916,
-//916, 916, 916, 917, 917, 917, 918, 918, 918, 918, 919, 919, 919, 920, 920, 920,
-//920, 921, 921, 921, 922, 922, 922, 922, 923, 923, 923, 924, 924, 924, 924, 925,
-//925, 925, 926, 926, 926, 926, 927, 927, 927, 928, 928, 928, 928, 929, 929, 929,
-//929, 930, 930, 930, 930, 931, 931, 931, 932, 932, 932, 932, 933, 933, 933, 933,
-//934, 934, 934, 934, 935, 935, 935, 936, 936, 936, 936, 937, 937, 937, 937, 938,
-//938, 938, 938, 939, 939, 939, 939, 940, 940, 940, 940, 941, 941, 941, 941, 942,
-//942, 942, 942, 943, 943, 943, 943, 944, 944, 944, 944, 945, 945, 945, 945, 946,
-//946, 946, 946, 947, 947, 947, 947, 947, 948, 948, 948, 948, 949, 949, 949, 949,
-//950, 950, 950, 950, 951, 951, 951, 951, 952, 952, 952, 952, 952, 953, 953, 953,
-//953, 954, 954, 954, 954, 955, 955, 955, 955, 955, 956, 956, 956, 956, 957, 957,
-//957, 957, 957, 958, 958, 958, 958, 959, 959, 959, 959, 959, 960, 960, 960, 960,
-//961, 961, 961, 961, 961, 962, 962, 962, 962, 963, 963, 963, 963, 963, 964, 964,
-//964, 964, 964, 965, 965, 965, 965, 966, 966, 966, 966, 966, 967, 967, 967, 967,
-//967, 968, 968, 968, 968, 968, 969, 969, 969, 969, 969, 970, 970, 970, 970, 971,
-//971, 971, 971, 971, 972, 972, 972, 972, 972, 973, 973, 973, 973, 973, 974, 974,
-//974, 974, 974, 975, 975, 975, 975, 975, 976, 976, 976, 976, 976, 977, 977, 977,
-//977, 977, 978, 978, 978, 978, 978, 978, 979, 979, 979, 979, 979, 980, 980, 980,
-//980, 980, 981, 981, 981, 981, 981, 982, 982, 982, 982, 982, 983, 983, 983, 983,
-//983, 983, 984, 984, 984, 984, 984, 985, 985, 985, 985, 985, 986, 986, 986, 986,
-//986, 986, 987, 987, 987, 987, 987, 988, 988, 988, 988, 988, 988, 989, 989, 989,
-//989, 989, 990, 990, 990, 990, 990, 990, 991, 991, 991, 991, 991, 991, 992, 992,
-//992, 992, 992, 993, 993, 993, 993, 993, 993, 994, 994, 994, 994, 994, 994, 995,
-//995, 995, 995, 995, 996, 996, 996, 996, 996, 996, 997, 997, 997, 997, 997, 997,
-//998, 998, 998, 998, 998, 998, 999, 999, 999, 999, 999, 999, 1000, 1000, 1000, 1000,
-//1000, 1000, 1001, 1001, 1001, 1001, 1001, 1001, 1002, 1002, 1002, 1002, 1002, 1002, 1003, 1003,
-//1003, 1003, 1003, 1003, 1004, 1004, 1004, 1004, 1004, 1004, 1005, 1005, 1005, 1005, 1005, 1005,
-//1006, 1006, 1006, 1006, 1006, 1006, 1007, 1007, 1007, 1007, 1007, 1007, 1007, 1008, 1008, 1008,
-//1008, 1008, 1008, 1009, 1009, 1009, 1009, 1009, 1009, 1010, 1010, 1010, 1010, 1010, 1010, 1010,
-//1011, 1011, 1011, 1011, 1011, 1011, 1012, 1012, 1012, 1012, 1012, 1012, 1013, 1013, 1013, 1013,
-//1013, 1013, 1013, 1014, 1014, 1014, 1014, 1014, 1014, 1015, 1015, 1015, 1015, 1015, 1015, 1015,
-//1016, 1016, 1016, 1016, 1016, 1016, 1016, 1017, 1017, 1017, 1017, 1017, 1017, 1018, 1018, 1018,
-//1018, 1018, 1018, 1018, 1019, 1019, 1019, 1019, 1019, 1019, 1019, 1020, 1020, 1020, 1020, 1020,
-//1020, 1020, 1021, 1021, 1021, 1021, 1021, 1021, 1021, 1022, 1022, 1022, 1022, 1022, 1022, 1023
-//};
+const uint16_t PROGMEM LDR_corr_log[] = {
+0, 102, 162, 204, 237, 264, 287, 306, 324, 339, 353, 366, 378, 389, 399, 409,
+418, 426, 434, 442, 449, 456, 462, 469, 475, 480, 486, 491, 496, 501, 506, 511,
+516, 520, 524, 528, 532, 536, 540, 544, 548, 551, 555, 558, 561, 565, 568, 571,
+574, 577, 580, 583, 585, 588, 591, 594, 596, 599, 601, 604, 606, 609, 611, 613,
+616, 618, 620, 622, 624, 627, 629, 631, 633, 635, 637, 639, 641, 642, 644, 646,
+648, 650, 652, 653, 655, 657, 659, 660, 662, 664, 665, 667, 668, 670, 672, 673,
+675, 676, 678, 679, 681, 682, 684, 685, 686, 688, 689, 691, 692, 693, 695, 696,
+697, 699, 700, 701, 702, 704, 705, 706, 707, 709, 710, 711, 712, 713, 714, 716,
+717, 718, 719, 720, 721, 722, 723, 725, 726, 727, 728, 729, 730, 731, 732, 733,
+734, 735, 736, 737, 738, 739, 740, 741, 742, 743, 744, 745, 746, 747, 748, 749,
+749, 750, 751, 752, 753, 754, 755, 756, 757, 757, 758, 759, 760, 761, 762, 763,
+763, 764, 765, 766, 767, 768, 768, 769, 770, 771, 772, 772, 773, 774, 775, 775,
+776, 777, 778, 778, 779, 780, 781, 781, 782, 783, 784, 784, 785, 786, 787, 787,
+788, 789, 789, 790, 791, 791, 792, 793, 794, 794, 795, 796, 796, 797, 798, 798,
+799, 800, 800, 801, 801, 802, 803, 803, 804, 805, 805, 806, 807, 807, 808, 808,
+809, 810, 810, 811, 811, 812, 813, 813, 814, 814, 815, 816, 816, 817, 817, 818,
+818, 819, 820, 820, 821, 821, 822, 822, 823, 824, 824, 825, 825, 826, 826, 827,
+827, 828, 828, 829, 830, 830, 831, 831, 832, 832, 833, 833, 834, 834, 835, 835,
+836, 836, 837, 837, 838, 838, 839, 839, 840, 840, 841, 841, 842, 842, 843, 843,
+844, 844, 845, 845, 846, 846, 847, 847, 848, 848, 849, 849, 849, 850, 850, 851,
+851, 852, 852, 853, 853, 854, 854, 854, 855, 855, 856, 856, 857, 857, 858, 858,
+858, 859, 859, 860, 860, 861, 861, 862, 862, 862, 863, 863, 864, 864, 864, 865,
+865, 866, 866, 867, 867, 867, 868, 868, 869, 869, 869, 870, 870, 871, 871, 871,
+872, 872, 873, 873, 873, 874, 874, 875, 875, 875, 876, 876, 877, 877, 877, 878,
+878, 879, 879, 879, 880, 880, 880, 881, 881, 882, 882, 882, 883, 883, 883, 884,
+884, 885, 885, 885, 886, 886, 886, 887, 887, 887, 888, 888, 888, 889, 889, 890,
+890, 890, 891, 891, 891, 892, 892, 892, 893, 893, 893, 894, 894, 894, 895, 895,
+895, 896, 896, 896, 897, 897, 897, 898, 898, 899, 899, 899, 900, 900, 900, 900,
+901, 901, 901, 902, 902, 902, 903, 903, 903, 904, 904, 904, 905, 905, 905, 906,
+906, 906, 907, 907, 907, 908, 908, 908, 909, 909, 909, 909, 910, 910, 910, 911,
+911, 911, 912, 912, 912, 913, 913, 913, 913, 914, 914, 914, 915, 915, 915, 916,
+916, 916, 916, 917, 917, 917, 918, 918, 918, 918, 919, 919, 919, 920, 920, 920,
+920, 921, 921, 921, 922, 922, 922, 922, 923, 923, 923, 924, 924, 924, 924, 925,
+925, 925, 926, 926, 926, 926, 927, 927, 927, 928, 928, 928, 928, 929, 929, 929,
+929, 930, 930, 930, 930, 931, 931, 931, 932, 932, 932, 932, 933, 933, 933, 933,
+934, 934, 934, 934, 935, 935, 935, 936, 936, 936, 936, 937, 937, 937, 937, 938,
+938, 938, 938, 939, 939, 939, 939, 940, 940, 940, 940, 941, 941, 941, 941, 942,
+942, 942, 942, 943, 943, 943, 943, 944, 944, 944, 944, 945, 945, 945, 945, 946,
+946, 946, 946, 947, 947, 947, 947, 947, 948, 948, 948, 948, 949, 949, 949, 949,
+950, 950, 950, 950, 951, 951, 951, 951, 952, 952, 952, 952, 952, 953, 953, 953,
+953, 954, 954, 954, 954, 955, 955, 955, 955, 955, 956, 956, 956, 956, 957, 957,
+957, 957, 957, 958, 958, 958, 958, 959, 959, 959, 959, 959, 960, 960, 960, 960,
+961, 961, 961, 961, 961, 962, 962, 962, 962, 963, 963, 963, 963, 963, 964, 964,
+964, 964, 964, 965, 965, 965, 965, 966, 966, 966, 966, 966, 967, 967, 967, 967,
+967, 968, 968, 968, 968, 968, 969, 969, 969, 969, 969, 970, 970, 970, 970, 971,
+971, 971, 971, 971, 972, 972, 972, 972, 972, 973, 973, 973, 973, 973, 974, 974,
+974, 974, 974, 975, 975, 975, 975, 975, 976, 976, 976, 976, 976, 977, 977, 977,
+977, 977, 978, 978, 978, 978, 978, 978, 979, 979, 979, 979, 979, 980, 980, 980,
+980, 980, 981, 981, 981, 981, 981, 982, 982, 982, 982, 982, 983, 983, 983, 983,
+983, 983, 984, 984, 984, 984, 984, 985, 985, 985, 985, 985, 986, 986, 986, 986,
+986, 986, 987, 987, 987, 987, 987, 988, 988, 988, 988, 988, 988, 989, 989, 989,
+989, 989, 990, 990, 990, 990, 990, 990, 991, 991, 991, 991, 991, 991, 992, 992,
+992, 992, 992, 993, 993, 993, 993, 993, 993, 994, 994, 994, 994, 994, 994, 995,
+995, 995, 995, 995, 996, 996, 996, 996, 996, 996, 997, 997, 997, 997, 997, 997,
+998, 998, 998, 998, 998, 998, 999, 999, 999, 999, 999, 999, 1000, 1000, 1000, 1000,
+1000, 1000, 1001, 1001, 1001, 1001, 1001, 1001, 1002, 1002, 1002, 1002, 1002, 1002, 1003, 1003,
+1003, 1003, 1003, 1003, 1004, 1004, 1004, 1004, 1004, 1004, 1005, 1005, 1005, 1005, 1005, 1005,
+1006, 1006, 1006, 1006, 1006, 1006, 1007, 1007, 1007, 1007, 1007, 1007, 1007, 1008, 1008, 1008,
+1008, 1008, 1008, 1009, 1009, 1009, 1009, 1009, 1009, 1010, 1010, 1010, 1010, 1010, 1010, 1010,
+1011, 1011, 1011, 1011, 1011, 1011, 1012, 1012, 1012, 1012, 1012, 1012, 1013, 1013, 1013, 1013,
+1013, 1013, 1013, 1014, 1014, 1014, 1014, 1014, 1014, 1015, 1015, 1015, 1015, 1015, 1015, 1015,
+1016, 1016, 1016, 1016, 1016, 1016, 1016, 1017, 1017, 1017, 1017, 1017, 1017, 1018, 1018, 1018,
+1018, 1018, 1018, 1018, 1019, 1019, 1019, 1019, 1019, 1019, 1019, 1020, 1020, 1020, 1020, 1020,
+1020, 1020, 1021, 1021, 1021, 1021, 1021, 1021, 1021, 1022, 1022, 1022, 1022, 1022, 1022, 1023
+};
 
 // LDR correction (sqrt)
 // Function: y = sqrt(x)*1023/sqrt(x);
-const uint16_t PROGMEM LDR_correction[] = {
+const uint16_t PROGMEM LDR_corr_sqrt[] = {
   0, 31, 45, 55, 63, 71, 78, 84, 90, 95, 101, 106, 110, 115, 119, 123,
   127, 131, 135, 139, 143, 146, 150, 153, 156, 159, 163, 166, 169, 172, 175, 178,
   180, 183, 186, 189, 191, 194, 197, 199, 202, 204, 207, 209, 212, 214, 216, 219,
