@@ -40,4 +40,4 @@ Wiring:
   - All remaining LEDs belong to ambilight
 
 - LDR:
-  - 5V —— LDR —— A0 —— 10k —— GND
+  - 3.3V —— LDR —— A0 —— 10k —— GND
