@@ -26,6 +26,7 @@ double hsv_value_inc = 0.05;
 
 // Initialize LEDs
 Adafruit_NeoPixel pixels = Adafruit_NeoPixel(256, PIN, NEO_GRB + NEO_KHZ800);
+const int MAX_NUM_LEDS = 170;
 
 MDNSResponder mdns;
 ESP8266WebServer server(80);
@@ -34,11 +35,11 @@ String webPage = "";
 WiFiUDP Udp;
 unsigned int localPort = 8888;  // local port to listen for UDP packets
 
-time_t getNtpTime();
+//time_t getNtpTime();
 static const char ntpServerName[] = "de.pool.ntp.org"; // NTP Server
-void serial_clock_display();
-void printDigits(int digits);
-void sendNTPpacket(IPAddress &address);
+//void serialClockDisplay();
+//void printDigits(int digits);
+//void sendNTPpacket(IPAddress &address);
 const int timeZone = 1;     // Central European Time
 int summertime = 0;
 
@@ -140,10 +141,14 @@ byte minutes = 0;
 byte min_five = 0;
 byte single_min = 0;
 
-double min_user_brightness;
-double max_user_brightness;
-int min_LDR_value;
-int max_LDR_value;
+double min_user_clock_brightness;
+double max_user_clock_brightness;
+int min_clock_LDR_value;
+int max_clock_LDR_value;
+double min_user_ambilight_brightness;
+double max_user_ambilight_brightness;
+int min_ambilight_LDR_value;
+int max_ambilight_LDR_value;
 byte LDR_corr_type;
 byte en_it_is;
 byte en_oclock;
@@ -161,26 +166,34 @@ double v_clock;
 double h_ambilight;
 double s_ambilight;
 double v_ambilight;
+byte ambilight_activation_type;
+int ambilight_LDR_threshold;
 
 // EEPROM address assignment
-const int EEPROM_addr_min_user_brightness = 0;
-const int EEPROM_addr_LDR_min = 1; // needs two bytes
-const int EEPROM_addr_max_user_brightness = 3;
-const int EEPROM_addr_LDR_max = 4; // needs two bytes
-const int EEPROM_addr_es_ist = 6;
-const int EEPROM_addr_uhr = 7;
-const int EEPROM_addr_single_min = 8;
-const int EEPROM_addr_ambilight = 9;
-const int EEPROM_addr_language = 10;
-const int EEPROM_addr_t_night_1 = 11;
-const int EEPROM_addr_t_night_2 = 12;
-const int EEPROM_addr_h_clock = 13;
-const int EEPROM_addr_s_clock = 14;
-const int EEPROM_addr_v_clock = 15;
-const int EEPROM_addr_h_ambilight = 16;
-const int EEPROM_addr_s_ambilight = 17;
-const int EEPROM_addr_v_ambilight = 18;
-const int EEPROM_addr_LDR_corr_type = 19;
+const int EEPROM_addr_min_user_clock_brightness = 0;
+const int EEPROM_addr_clock_LDR_min = 1; // needs two bytes
+const int EEPROM_addr_max_user_clock_brightness = 3;
+const int EEPROM_addr_clock_LDR_max = 4; // needs two bytes
+const int EEPROM_addr_min_user_ambilight_brightness = 6;
+const int EEPROM_addr_ambilight_LDR_min = 7; // needs two bytes
+const int EEPROM_addr_max_user_ambilight_brightness = 9;
+const int EEPROM_addr_ambilight_LDR_max = 10; // needs two bytes
+const int EEPROM_addr_es_ist = 12;
+const int EEPROM_addr_uhr = 13;
+const int EEPROM_addr_single_min = 14;
+const int EEPROM_addr_ambilight = 15;
+const int EEPROM_addr_language = 16;
+const int EEPROM_addr_t_night_1 = 17;
+const int EEPROM_addr_t_night_2 = 18;
+const int EEPROM_addr_h_clock = 19;
+const int EEPROM_addr_s_clock = 20;
+const int EEPROM_addr_v_clock = 21;
+const int EEPROM_addr_h_ambilight = 22;
+const int EEPROM_addr_s_ambilight = 23;
+const int EEPROM_addr_v_ambilight = 24;
+const int EEPROM_addr_LDR_corr_type = 25;
+const int EEPROM_addr_ambilight_activation_type = 26;
+const int EEPROM_addr_ambilight_LDR_threshold = 27; // needs two bytes
 
 ////////////////////////////////////////////////////
 // Setup routine
@@ -208,35 +221,45 @@ void setup() {
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
   // Execute this code only once to initialize default values
-  //  EEPROM.write(EEPROM_addr_min_user_brightness, 45); // Min brightness set by user
-  //  EEPROMWriteInt(EEPROM_addr_LDR_min, 124); // Correspondig LDR value
-  //  EEPROM.write(EEPROM_addr_max_user_brightness, 100); // Max brightness set by user
-  //  EEPROMWriteInt(EEPROM_addr_LDR_max, 912); // Correspondig LDR value
-  //  EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
-  //  EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
-  //  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
-  //  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
-  //  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
-  //  EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
-  //  EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
-  //  EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
-  //  EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
-  //  EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
-  //  EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
-  //  EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
-  //  EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
-  //  EEPROM.write(EEPROM_addr_LDR_corr_type, 0); // LDR correction type, default: 0
-  //  EEPROM.commit();
+//  EEPROM.write(EEPROM_addr_min_user_clock_brightness, 45); // Min brightness set by user
+//  EEPROMWriteInt(EEPROM_addr_clock_LDR_min, 124); // Correspondig LDR value
+//  EEPROM.write(EEPROM_addr_max_user_clock_brightness, 100); // Max brightness set by user
+//  EEPROMWriteInt(EEPROM_addr_clock_LDR_max, 912); // Correspondig LDR value
+//  EEPROM.write(EEPROM_addr_min_user_ambilight_brightness, 45); // Min brightness set by user
+//  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_min, 124); // Correspondig LDR value
+//  EEPROM.write(EEPROM_addr_max_user_ambilight_brightness, 100); // Max brightness set by user
+//  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_max, 912); // Correspondig LDR value
+//  EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
+//  EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
+//  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
+//  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
+//  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
+//  EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
+//  EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
+//  EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
+//  EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
+//  EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
+//  EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
+//  EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
+//  EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
+//  EEPROM.write(EEPROM_addr_LDR_corr_type, 0); // LDR correction type, default: 0
+//  EEPROM.write(EEPROM_addr_ambilight_activation_type, 0); // Ambilight activation type, default: 0 (always active)
+//  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_threshold, 1023); // Correspondig LDR value
+//  EEPROM.commit();
 
   // Read settings from EEPROM
-  min_user_brightness = EEPROM.read(EEPROM_addr_min_user_brightness);
-  min_user_brightness = min_user_brightness / 100;
-  max_user_brightness = EEPROM.read(EEPROM_addr_max_user_brightness);
-  min_user_brightness = max_user_brightness / 100;
-  min_user_brightness = constrain(min_user_brightness, 0, 1);
-  max_user_brightness = constrain(max_user_brightness, 0, 1);
-  min_LDR_value = EEPROMReadInt(EEPROM_addr_LDR_min);
-  max_LDR_value = EEPROMReadInt(EEPROM_addr_LDR_max);
+  min_user_clock_brightness = (double) EEPROM.read(EEPROM_addr_min_user_clock_brightness) / 100;
+  max_user_clock_brightness = (double) EEPROM.read(EEPROM_addr_max_user_clock_brightness) / 100;
+  min_user_clock_brightness = constrain(min_user_clock_brightness, 0, 1);
+  max_user_clock_brightness = constrain(max_user_clock_brightness, 0, 1);
+  min_clock_LDR_value = EEPROMReadInt(EEPROM_addr_clock_LDR_min);
+  max_clock_LDR_value = EEPROMReadInt(EEPROM_addr_clock_LDR_max);
+  min_user_ambilight_brightness = (double) EEPROM.read(EEPROM_addr_min_user_ambilight_brightness) / 100;
+  max_user_ambilight_brightness = (double) EEPROM.read(EEPROM_addr_max_user_ambilight_brightness) / 100;
+  min_user_ambilight_brightness = constrain(min_user_ambilight_brightness, 0, 1);
+  max_user_ambilight_brightness = constrain(max_user_ambilight_brightness, 0, 1);
+  min_ambilight_LDR_value = EEPROMReadInt(EEPROM_addr_ambilight_LDR_min);
+  max_ambilight_LDR_value = EEPROMReadInt(EEPROM_addr_ambilight_LDR_max);
   en_it_is = EEPROM.read(EEPROM_addr_es_ist);
   en_oclock = EEPROM.read(EEPROM_addr_uhr);
   en_single_min = EEPROM.read(EEPROM_addr_single_min);
@@ -257,6 +280,8 @@ void setup() {
   s_ambilight = constrain(s_ambilight, 0, 1);
   v_ambilight = constrain(v_ambilight, 0, 1);
   LDR_corr_type = EEPROM.read(EEPROM_addr_LDR_corr_type);
+  ambilight_activation_type = EEPROM.read(EEPROM_addr_ambilight_activation_type);
+  ambilight_LDR_threshold = EEPROMReadInt(EEPROM_addr_ambilight_LDR_threshold);
 
   // Convert HSV to RGB
   rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
@@ -274,41 +299,54 @@ void setup() {
     }
   }
 
-  // html website for web server
-  webPage += "<h1>Wordclock web server</h1>";
-  webPage += "<p>Unless stated otherwise, all settings are stored permanently.</p>";
+  // Html website for web server
+  webPage += "<h1>Wordclock Web Server</h1>";
+  webPage += "<ul><li>Unless stated otherwise, all settings are stored permanently.</li>";
+  webPage += "<li>HSV format is used for LEDs colors. Check <a href='http://colorizer.org' target='_blank'>Colorizer</a> (HSV/HSB).</li>";
+  webPage += "<li>For brightness calibration, first adjust brightness manually and then select according lightning conditions. One has time for manual brightness adjustment until the clock updates the time, i.e. max. 60 s.</li></ul>";
 
+  // General
   webPage += "<h2>General</h2>";
-  webPage += "<p>Reset: <a href=\"reset\"><button>Submit</button></a></p>";
-  webPage += "<form action='leds_on_off'>Clock LEDs (temporary): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-  webPage += "<form action='ambilight'>Ambilight: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "<p>Restart clock: <a href=\"reset\"><button>Submit</button></a></p>";
 
-  // LED color & brightness
-  webPage += "<h2>LED color & brightness</h2>";
-  webPage += "<p>HSV format is used for LEDs colors. Check <a href='http://colorizer.org' target='_blank'>Colorizer</a> (HSV/HSB).<br>";
-  webPage += "For brightness calibration, first adjust brightness manually and then select according lightning conditions.</p>";
-  webPage += "<form action='hue'><form> Hue (temporary, 0-360 deg): <input type='number' name='value' min='0' max='360' step='1' value='0'><input type='submit' value='Submit'></form></form>";
-  webPage += "<form action='sat'><form> Saturation (temporary, 0-100 %): <input type='number' name='value' min='0' max='100' step='1' value='100'><input type='submit' value='Submit'></form></form>";
-  webPage += "<p>Save current color permanently: <a href=\"store_color\"><button>Submit</button></a></p>";
-  webPage += "<form action='brightness'>Brightness (temporary, 5 % step): <input type='radio' name='state' value='1'>Increase <input type='radio' name='state' value='0'>Decrease <input type='submit' value='Submit'></form>";
-  webPage += "<form action='calib_brightness'>Calibrate brightness: <input type='radio' name='state' value='1'>Bright room <input type='radio' name='state' value='0'>Dark room <input type='submit' value='Submit'></form>";
-  webPage += "<p>LED test: <a href=\"led_test\"><button>Submit</button></a></p>";
-  webPage += "<form action='LDR_corr_type'>Correction light measurement: <select name='LDR_corr_type'><option value='0'>None (linear)</option><option value='1'>Square root</option><option value='2'>Logarithmic</option></select><input type='submit' value='Submit'></form>";
-
-  // Nighttime
-  webPage += "<h2>Night-time</h2>";
-  webPage += "<p>The LEDs are switched off during the specified night-time.<br>";
-  webPage += "Selecting the same start and end time disables night-time mode.</p>";
-  webPage += "<form action='night_start'><form> Start of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='1'><input type='submit' value='Submit'></form></form>";
-  webPage += "<form action='night_end'><form> End of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='7'><input type='submit' value='Submit'></form></form>";
-  webPage += "<form action='disable_nighttime_temp'>Night-time (temporary): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form></p>";
-
-  // Other settings
-  webPage += "<h2>Other settings</h2>";
+  // Clock
+  webPage += "<h2>Clock</h2>";
+  webPage += "<form action='clock_leds'>Clock LEDs (temporary): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "<form action='hue_clock'><form> Hue (temporary, 0-360 deg): <input type='number' name='value' min='0' max='360' step='1' value='0'><input type='submit' value='Submit'></form></form>";
+  webPage += "<form action='sat_clock'><form> Saturation (temporary, 0-100 %): <input type='number' name='value' min='0' max='100' step='1' value='100'><input type='submit' value='Submit'></form></form>";
+  webPage += "<p>Save current color permanently: <a href=\"store_color_clock\"><button>Submit</button></a></p>";
+  webPage += "<form action='clock_brightness'>Brightness (temporary, 5 % step): <input type='radio' name='state' value='1'>Increase <input type='radio' name='state' value='0'>Decrease <input type='submit' value='Submit'></form>";
+  webPage += "<form action='calib_clock_brightness'>Calibrate brightness: <input type='radio' name='state' value='1'>Bright room <input type='radio' name='state' value='0'>Dark room <input type='submit' value='Submit'></form>";
   webPage += "<form action='language'>Language: <select name='language'><option value='0'>German</option><option value='1'>English</option></select><input type='submit' value='Submit'></form>";
   webPage += "<form action='disp_oclock'>Display 'o'clock': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
   webPage += "<form action='disp_it_is'>Display 'It is': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
   webPage += "<form action='disp_single_min'>Corner LEDs for single minutes: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+
+  // Ambilight
+  webPage += "<h2>Ambilight</h2>";
+  webPage += "<form action='ambilight'>Ambilight: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "<form action='ambilight_activation'>Ambilight activation: <select name='ambilight_activation'><option value='0'>Always</option><option value='1'>When brightness goes below calibrated value</option></select><input type='submit' value='Submit'></form>";
+  webPage += "<p>Calibrate brightness threshold for ambilight activation: <a href=\"ambilight_LDR_threshold\"><button>Submit</button></a></p>";
+  webPage += "<form action='hue_ambilight'><form> Hue (temporary, 0-360 deg): <input type='number' name='value' min='0' max='360' step='1' value='0'><input type='submit' value='Submit'></form></form>";
+  webPage += "<form action='sat_ambilight'><form> Saturation (temporary, 0-100 %): <input type='number' name='value' min='0' max='100' step='1' value='100'><input type='submit' value='Submit'></form></form>";
+  webPage += "<p>Select same color as clock LEDs (temporary): <a href=\"ambilight_eq_clock_color\"><button>Submit</button></a></p>";
+  webPage += "<p>Save current color permanently: <a href=\"store_color_ambilight\"><button>Submit</button></a></p>";
+  webPage += "<form action='ambilight_brightness'>Brightness (temporary, 5 % step): <input type='radio' name='state' value='1'>Increase <input type='radio' name='state' value='0'>Decrease <input type='submit' value='Submit'></form>";
+  webPage += "<form action='calib_ambilight_brightness'>Calibrate brightness: <input type='radio' name='state' value='1'>Bright room <input type='radio' name='state' value='0'>Dark room <input type='submit' value='Submit'></form>";
+  webPage += "<p>Select same brightness calibration as clock: <a href=\"ambilight_eq_clock_brightness\"><button>Submit</button></a></p>";
+  
+  // Nighttime
+  webPage += "<h2>Night-time</h2>";
+  webPage += "<ul><li>All LEDs are switched off during the specified night-time.</li>";
+  webPage += "<li>Selecting the same start and end time disables night-time mode.</li></ul>";
+  webPage += "<form action='night_start'><form> Start of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='1'><input type='submit' value='Submit'></form></form>";
+  webPage += "<form action='night_end'><form> End of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='7'><input type='submit' value='Submit'></form></form>";
+  webPage += "<form action='nighttime_temp'>Night-time (temporary): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form></p>";
+
+  // Other settings
+  webPage += "<h2>Other settings</h2>";
+  webPage += "<p>LED test: <a href=\"LEDTest\"><button>Submit</button></a></p>";
+  webPage += "<form action='LDR_corr_type'>Correction light measurement (influences the LED brightness): <select name='LDR_corr_type'><option value='0'>None (linear)</option><option value='1'>Square root</option><option value='2'>Logarithmic</option></select><input type='submit' value='Submit'></form>";
   webPage += "Show current date (day): <a href=\"day_of_month\"><button>Submit</button></a>";
 
   pixels.begin(); // This initializes the NeoPixel library.
@@ -346,6 +384,10 @@ void setup() {
     ESP.reset();
   });
 
+  /////////////////////////////////////
+  // Server: Clock
+  /////////////////////////////////////
+
   // Enable/Disable clock LEDs temporarily
   server.on("/clock_leds", []() {
     server.send(200, "text/html", webPage);
@@ -362,72 +404,39 @@ void setup() {
     delay(1000);
   });
 
-  // Enable/Disable ambilight
-  server.on("/ambilight", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Enable ambilight");
-      if (!en_ambilight) {
-        EEPROM.write(EEPROM_addr_ambilight, 1);
-        EEPROM.commit();
-        en_ambilight = true;
-        ambilight();
-      }
-    }
-    else {
-      Serial.println("Disable ambilight");
-      if (en_ambilight) {
-        EEPROM.write(EEPROM_addr_ambilight, 0);
-        EEPROM.commit();
-        en_ambilight = false;
-        disable_ambilight();
-      }
-    }
-    delay(1000);
-  });
-
-  /////////////////////////////////////
-  // Server: LED color & brightness
-  /////////////////////////////////////
-
-  // Select hue
-  server.on("/hue", []() {
+  // Select clock hue
+  server.on("/hue_clock", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("value").toInt();
     state = map(state, 0, 360, 0, 100);
     h_clock = double(state) / 100;
-    h_ambilight = h_clock;
     // Convert to RGB
     rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
     settings_changed = true;
-    Serial.print("LED hue is now: ");
+    Serial.print("Clock LED hue is now: ");
     Serial.print(h_clock);
     Serial.println(" / 1");
     delay(1000);
   });
 
-  // Select saturation
-  server.on("/sat", []() {
+  // Select clock saturation
+  server.on("/sat_clock", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("value").toInt();
     s_clock = (double) state / 100;
-    s_ambilight = s_clock;
     // Convert to RGB
     rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
     settings_changed = true;
-    Serial.print("LED saturation is now: ");
+    Serial.print("Clock LED saturation is now: ");
     Serial.print(s_clock);
     Serial.println(" / 1");
     delay(1000);
   });
 
-  // Store current color to EEPROM
-  server.on("/store_color", []() {
+  // Store current clock color to EEPROM
+  server.on("/store_color_clock", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Saving hue and saturation values in EEPROM");
+    Serial.println("Saving clock hue and saturation values in EEPROM");
     byte temp = (int) (h_clock * 100);
     EEPROM.write(EEPROM_addr_h_clock, temp);
     Serial.print("Hue: ");
@@ -441,7 +450,7 @@ void setup() {
   });
 
   // Set brightness
-  server.on("/brightness", []() {
+  server.on("/clock_brightness", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("state").toInt();
 
@@ -455,105 +464,27 @@ void setup() {
     }
 
     v_clock = constrain(v_clock, 0, 1);
-    v_ambilight = v_clock;
     rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    Serial.print(v_clock);
-    Serial.println("");
+    Serial.println(v_clock);
     settings_changed = true;
     delay(1000);
   });
 
   // Calibrate bright/dark room
-  server.on("/calib_brightness", []() {
+  server.on("/calib_clock_brightness", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("state").toInt();
     if (state == 1) {
       Serial.println("Calibrate brightness for bright room");
-      set_max_brightness();
+      setMaxClockBrightness();
     }
     else {
       Serial.println("Calibrate brightness for dark room");
-      set_min_brightness();
+      setMinClockBrightness();
     }
     settings_changed = true;
     delay(1000);
   });
-
-  // LED test
-  server.on("/led_test", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Testing all LEDs");
-    LED_test();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Set language
-  server.on("/LDR_corr_type", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("LDR_corr_type").toInt();
-    LDR_corr_type = state;
-    EEPROM.write(EEPROM_addr_LDR_corr_type, LDR_corr_type);
-    EEPROM.commit();
-    settings_changed = true;
-    delay(1000);
-  });
-  
-  /////////////////////////////////////
-  // Server: Night-time
-  /////////////////////////////////////
-
-  // Start of night-time
-  server.on("/night_start", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    t_night_1 = state;
-    EEPROM.write(EEPROM_addr_t_night_1, t_night_1);
-    EEPROM.commit();
-    Serial.print("Starting night-time at: ");
-    Serial.print(t_night_1);
-    Serial.println(" h");
-    delay(1000);
-  });
-
-  // End of night-time
-  server.on("/night_end", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    t_night_2 = state;
-    EEPROM.write(EEPROM_addr_t_night_2, t_night_2);
-    EEPROM.commit();
-    Serial.print("Ending night-time at: ");
-    Serial.print(t_night_2);
-    Serial.println(" h");
-    delay(1000);
-  });
-
-  // Enable/Disable night-time temporarily
-  server.on("/disable_nighttime_temp", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Disable night-time temporarily");
-      if (en_nighttime) {
-        en_nighttime = 0;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Enable night-time");
-      if (!en_nighttime) {
-        en_nighttime = 1;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  /////////////////////////////////////
-  // Server: Other settings
-  /////////////////////////////////////
 
   // Set language
   server.on("/language", []() {
@@ -654,16 +585,259 @@ void setup() {
     delay(1000);
   });
 
-  // Show current day of month
-  server.on("/day_of_month", []() {
+  /////////////////////////////////////
+  // Server: Ambilight
+  /////////////////////////////////////
+
+  // Enable/Disable ambilight
+  server.on("/ambilight", []() {
     server.send(200, "text/html", webPage);
-    Serial.println("Displaying day of month");
-    show_day();
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Enable ambilight");
+      if (!en_ambilight) {
+        EEPROM.write(EEPROM_addr_ambilight, 1);
+        EEPROM.commit();
+        en_ambilight = true;
+        ambilight();
+      }
+    }
+    else {
+      Serial.println("Disable ambilight");
+      if (en_ambilight) {
+        EEPROM.write(EEPROM_addr_ambilight, 0);
+        EEPROM.commit();
+        en_ambilight = false;
+        disableAmbilight();
+      }
+    }
+    delay(1000);
+  });
+
+  // Select ambilight activation type
+  server.on("/ambilight_activation", []() {
+    server.send(200, "text/html", webPage);
+    ambilight_activation_type = server.arg("ambilight_activation").toInt();
+    EEPROM.write(EEPROM_addr_ambilight_activation_type, ambilight_activation_type);
+    EEPROM.commit();
     settings_changed = true;
     delay(1000);
   });
 
-  server.begin();  
+  // Set ambilight LDR threshold
+  server.on("/ambilight_LDR_threshold", []() {
+    server.send(200, "text/html", webPage);
+    ambilight_LDR_threshold = readSensor();
+    EEPROMWriteInt(EEPROM_addr_ambilight_LDR_threshold, ambilight_LDR_threshold);
+    EEPROM.commit();
+    settings_changed = true;
+    delay(1000);
+  });
+
+  // Select ambilight hue
+  server.on("/hue_ambilight", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("value").toInt();
+    state = map(state, 0, 360, 0, 100);
+    h_ambilight = double(state) / 100;
+    // Convert to RGB
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    settings_changed = true;
+    Serial.print("Ambilight LED hue is now: ");
+    Serial.print(h_ambilight);
+    Serial.println(" / 1");
+    delay(1000);
+  });
+
+  // Select ambilight saturation
+  server.on("/sat_ambilight", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("value").toInt();
+    s_ambilight = (double) state / 100;
+    // Convert to RGB
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    settings_changed = true;
+    Serial.print("Ambilight LED saturation is now: ");
+    Serial.print(s_ambilight);
+    Serial.println(" / 1");
+    delay(1000);
+  });
+
+  // Ambilight LEDs obtain same color as clock LEDs
+  server.on("/ambilight_eq_clock_color", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Ambilight: Select same color as clock LEDs and store to EEPROM");
+    h_ambilight = h_clock;
+    s_ambilight = s_clock;
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    byte temp = (int) (h_ambilight * 100);
+    EEPROM.write(EEPROM_addr_h_ambilight, temp);
+    Serial.print("Hue: ");
+    Serial.println(temp);
+    temp = (int) (s_ambilight * 100);
+    EEPROM.write(EEPROM_addr_s_ambilight, temp);
+    Serial.print("Saturation: ");
+    Serial.println(temp);
+    EEPROM.commit();
+    settings_changed = true;
+    delay(1000);
+  });
+
+  // Store current ambilight color to EEPROM
+  server.on("/store_color_ambilight", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Saving ambilight hue and saturation values in EEPROM");
+    byte temp = (int) (h_ambilight * 100);
+    EEPROM.write(EEPROM_addr_h_ambilight, temp);
+    Serial.print("Hue: ");
+    Serial.println(temp);
+    temp = (int) (s_ambilight * 100);
+    EEPROM.write(EEPROM_addr_s_ambilight, temp);
+    Serial.print("Saturation: ");
+    Serial.println(temp);
+    EEPROM.commit();
+    delay(1000);
+  });
+
+  // Set brightness
+  server.on("/ambilight_brightness", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+
+    if (state == 1) {
+      Serial.print("Increasing ambilight LED brightness to ");
+      v_ambilight += hsv_value_inc;
+    }
+    else {
+      Serial.print("Decreasing ambilight LED brightness to ");
+      v_ambilight -= hsv_value_inc;
+    }
+
+    v_ambilight = constrain(v_ambilight, 0, 1);
+    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+    Serial.println(v_ambilight);
+    settings_changed = true;
+    delay(1000);
+  });
+
+  // Calibrate bright/dark room
+  server.on("/calib_ambilight_brightness", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Calibrate ambilight brightness for bright room");
+      setMaxAmbilightBrightness();
+    }
+    else {
+      Serial.println("Calibrate ambilight brightness for dark room");
+      setMinAmbilightBrightness();
+    }
+    settings_changed = true;
+    delay(1000);
+  });
+
+  // Select same brightness settings for ambilight as clock LED
+  server.on("/ambilight_eq_clock_brightness", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Select same brightness settings for ambilight as clock");    
+    min_user_ambilight_brightness =  min_user_clock_brightness;
+    max_user_ambilight_brightness =  max_user_clock_brightness;
+    min_ambilight_LDR_value = min_clock_LDR_value;
+    max_ambilight_LDR_value = max_clock_LDR_value;
+    EEPROM.write(EEPROM_addr_min_user_ambilight_brightness, min_user_ambilight_brightness);
+    EEPROM.write(EEPROM_addr_max_user_ambilight_brightness, max_user_ambilight_brightness);
+    EEPROM.write(EEPROM_addr_ambilight_LDR_min, min_ambilight_LDR_value);
+    EEPROM.write(EEPROM_addr_ambilight_LDR_max, max_ambilight_LDR_value);
+    EEPROM.commit();    
+    settings_changed = true;
+    delay(1000);
+  });
+  
+  /////////////////////////////////////
+  // Server: Night-time
+  /////////////////////////////////////
+
+  // Start of night-time
+  server.on("/night_start", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("value").toInt();
+    t_night_1 = state;
+    EEPROM.write(EEPROM_addr_t_night_1, t_night_1);
+    EEPROM.commit();
+    Serial.print("Starting night-time at: ");
+    Serial.print(t_night_1);
+    Serial.println(" h");
+    delay(1000);
+  });
+
+  // End of night-time
+  server.on("/night_end", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("value").toInt();
+    t_night_2 = state;
+    EEPROM.write(EEPROM_addr_t_night_2, t_night_2);
+    EEPROM.commit();
+    Serial.print("Ending night-time at: ");
+    Serial.print(t_night_2);
+    Serial.println(" h");
+    delay(1000);
+  });
+
+  // Enable/Disable night-time temporarily
+  server.on("/nighttime_temp", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+    if (state == 0) {
+      Serial.println("Disable night-time temporarily");
+      if (en_nighttime) {
+        en_nighttime = 0;
+        settings_changed = true;
+      }
+    }
+    else {
+      Serial.println("Enable night-time");
+      if (!en_nighttime) {
+        en_nighttime = 1;
+        settings_changed = true;
+      }
+    }
+    delay(1000);
+  });
+
+  /////////////////////////////////////
+  // Server: Other settings
+  /////////////////////////////////////
+
+  // LED test
+  server.on("/LEDTest", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Testing all LEDs");
+    LEDTest();
+    settings_changed = true;
+    delay(1000);
+  });
+
+  // Set LDR correction type
+  server.on("/LDR_corr_type", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("LDR_corr_type").toInt();
+    LDR_corr_type = state;
+    EEPROM.write(EEPROM_addr_LDR_corr_type, LDR_corr_type);
+    EEPROM.commit();
+    settings_changed = true;
+    delay(1000);
+  });
+
+  // Show current day of month
+  server.on("/day_of_month", []() {
+    server.send(200, "text/html", webPage);
+    Serial.println("Displaying day of month");
+    showDay();
+    settings_changed = true;
+    delay(1000);
+  });
+
+  server.begin();
   Serial.println("HTTP server started");
 
 }
@@ -688,19 +862,23 @@ void loop() {
         if (!nighttime() && en_clock) {
 
           // Determine LED brightness based on LDR measurement
-          get_brightness();
+          // Only adjust brightness via LDR when minute has changed, not the settings only
+          // This is not very elegant
+          if (!settings_changed)
+            getClockBrightness();
 
+          // Ambilight
           if (en_ambilight)
             ambilight();
           else
-            disable_ambilight();
+            disableAmbilight();
 
           // Determine and display time
-          clock_display(); // Real clock
-          serial_clock_display(); // Serial port
+          clockDisplay(); // Real clock
+          serialClockDisplay(); // Serial port
         }
         else
-          disable_all_led();
+          disableAllLED();
 
         prevDisplay = minute();
         settings_changed = false;
@@ -719,10 +897,10 @@ void loop() {
 ////////////////////////////////////////////////////
 // Determine current time and send data to LEDs
 ////////////////////////////////////////////////////
-void clock_display() {
+void clockDisplay() {
 
   // All clock LED off
-  disable_clock_led();
+  disableClockLED();
 
   // Get NTP time
   minutes = minute();
@@ -731,7 +909,7 @@ void clock_display() {
   // Single minutes
   single_min = minutes % 5;
   if (single_min > 0 && en_single_min)
-    send_time_2_LED(single_mins[single_min - 1]);
+    sendTime2LED(single_mins[single_min - 1]);
 
   // Five minutes
   min_five = minutes - single_min;
@@ -750,75 +928,75 @@ void clock_display() {
 
       // Display "es ist"
       if (en_it_is)
-        send_time_2_LED(es_ist);
+        sendTime2LED(es_ist);
 
       switch (min_five) {
         case 0:
-          send_time_2_LED(full_hours_GER[hours]);
-          if (en_oclock) send_time_2_LED(uhr);
+          sendTime2LED(full_hours_GER[hours]);
+          if (en_oclock) sendTime2LED(uhr);
           break;
         case 5:
-          send_time_2_LED(fuenf_min);
-          send_time_2_LED(nach);
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(fuenf_min);
+          sendTime2LED(nach);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 10:
-          send_time_2_LED(zehn_min);
-          send_time_2_LED(nach);
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(zehn_min);
+          sendTime2LED(nach);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 15:
-          send_time_2_LED(viertel_min);
-          send_time_2_LED(nach);
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(viertel_min);
+          sendTime2LED(nach);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 20:
-          send_time_2_LED(zwanzig_min);
-          send_time_2_LED(nach);
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(zwanzig_min);
+          sendTime2LED(nach);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 25:
-          send_time_2_LED(fuenf_min);
-          send_time_2_LED(vor);
-          send_time_2_LED(halb);
+          sendTime2LED(fuenf_min);
+          sendTime2LED(vor);
+          sendTime2LED(halb);
           hours++;
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 30:
-          send_time_2_LED(halb);
+          sendTime2LED(halb);
           hours++;
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 35:
-          send_time_2_LED(fuenf_min);
-          send_time_2_LED(nach);
-          send_time_2_LED(halb);
+          sendTime2LED(fuenf_min);
+          sendTime2LED(nach);
+          sendTime2LED(halb);
           hours++;
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 40:
-          send_time_2_LED(zwanzig_min);
-          send_time_2_LED(vor);
+          sendTime2LED(zwanzig_min);
+          sendTime2LED(vor);
           hours++;
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 45:
-          send_time_2_LED(viertel_min);
-          send_time_2_LED(vor);
+          sendTime2LED(viertel_min);
+          sendTime2LED(vor);
           hours++;
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 50:
-          send_time_2_LED(zehn_min);
-          send_time_2_LED(vor);
+          sendTime2LED(zehn_min);
+          sendTime2LED(vor);
           hours++;
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(hours_GER[hours]);
           break;
         case 55:
-          send_time_2_LED(fuenf_min);
-          send_time_2_LED(vor);
+          sendTime2LED(fuenf_min);
+          sendTime2LED(vor);
           hours++;
-          send_time_2_LED(hours_GER[hours]);
+          sendTime2LED(hours_GER[hours]);
           break;
       }
 
@@ -829,74 +1007,74 @@ void clock_display() {
 
       // Display "it is"
       if (en_it_is)
-        send_time_2_LED(it_is);
+        sendTime2LED(it_is);
 
       switch (min_five) {
         case 0:
-          send_time_2_LED(hours_EN[hours]);
-          if (en_oclock) send_time_2_LED(oclock);
+          sendTime2LED(hours_EN[hours]);
+          if (en_oclock) sendTime2LED(oclock);
           break;
         case 5:
-          send_time_2_LED(five_min);
-          send_time_2_LED(past);
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(five_min);
+          sendTime2LED(past);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 10:
-          send_time_2_LED(ten_min);
-          send_time_2_LED(past);
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(ten_min);
+          sendTime2LED(past);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 15:
-          send_time_2_LED(quarter_min);
-          send_time_2_LED(past);
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(quarter_min);
+          sendTime2LED(past);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 20:
-          send_time_2_LED(twenty_min);
-          send_time_2_LED(past);
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(twenty_min);
+          sendTime2LED(past);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 25:
-          send_time_2_LED(twenty_min);
-          send_time_2_LED(five_min);
-          send_time_2_LED(past);
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(twenty_min);
+          sendTime2LED(five_min);
+          sendTime2LED(past);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 30:
-          send_time_2_LED(half);
-          send_time_2_LED(past);
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(half);
+          sendTime2LED(past);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 35:
-          send_time_2_LED(twenty_min);
-          send_time_2_LED(five_min);
-          send_time_2_LED(to);
+          sendTime2LED(twenty_min);
+          sendTime2LED(five_min);
+          sendTime2LED(to);
           hours++;
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 40:
-          send_time_2_LED(twenty_min);
-          send_time_2_LED(to);
+          sendTime2LED(twenty_min);
+          sendTime2LED(to);
           hours++;
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 45:
-          send_time_2_LED(quarter_min);
-          send_time_2_LED(to);
+          sendTime2LED(quarter_min);
+          sendTime2LED(to);
           hours++;
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 50:
-          send_time_2_LED(ten_min);
-          send_time_2_LED(to);
+          sendTime2LED(ten_min);
+          sendTime2LED(to);
           hours++;
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(hours_EN[hours]);
           break;
         case 55:
-          send_time_2_LED(five_min);
-          send_time_2_LED(to);
+          sendTime2LED(five_min);
+          sendTime2LED(to);
           hours++;
-          send_time_2_LED(hours_EN[hours]);
+          sendTime2LED(hours_EN[hours]);
           break;
       }
       break;
@@ -908,11 +1086,10 @@ void clock_display() {
 ////////////////////////////////////////////////////
 // Send data to LEDs
 ////////////////////////////////////////////////////
-void send_time_2_LED(byte x[]) {
+void sendTime2LED(byte x[]) {
 
   for (byte i = 0; i <= 6; i++) {
     if (x[i] != 0)
-      // pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
       pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
   }
 
@@ -927,10 +1104,9 @@ void send_time_2_LED(byte x[]) {
 ////////////////////////////////////////////////////
 // Display numbers
 ////////////////////////////////////////////////////
-void send_num_2_LED(byte x[]) {
+void sendNum2LED(byte x[]) {
   for (byte i = 0; i <= 16; i++) {
     if (x[i] != 0)
-      // pixels.setPixelColor(x[i] - 1, pixels.Color(R_clock, G_clock, B_clock));
       pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
   }
 }
@@ -938,7 +1114,7 @@ void send_num_2_LED(byte x[]) {
 ////////////////////////////////////////////////////
 // Disable clock LEDs
 ////////////////////////////////////////////////////
-void disable_clock_led() {
+void disableClockLED() {
   for (byte i = 0; i <= 114; i++) {
     pixels.setPixelColor(i, pixels.Color(0, 0, 0));
   }
@@ -948,17 +1124,35 @@ void disable_clock_led() {
 // Enable ambilight LEDs
 ////////////////////////////////////////////////////
 void ambilight() {
-  for (byte i = 114; i <= 170; i++) {
-    // pixels.setPixelColor(i - 1, pixels.Color(R_ambilight, G_ambilight, B_ambilight));
-    pixels.setPixelColor(i - 1, pgm_read_byte(&gamma8[ambilight_rgb[0]]), pgm_read_byte(&gamma8[ambilight_rgb[1]]), pgm_read_byte(&gamma8[ambilight_rgb[2]]));
+
+  bool enable = false;
+  switch (ambilight_activation_type) {
+
+    case 0: // always active
+      enable = true;
+      break;
+
+    case 1: // Activate when LDR value is below threshold
+      int sensor_value = readSensor();
+      if (sensor_value <= ambilight_LDR_threshold)
+        enable = true;
+      break;
   }
-  pixels.show();
+
+  if (enable) {
+    for (byte i = 114; i <= MAX_NUM_LEDS; i++) {
+      pixels.setPixelColor(i - 1, pgm_read_byte(&gamma8[ambilight_rgb[0]]), pgm_read_byte(&gamma8[ambilight_rgb[1]]), pgm_read_byte(&gamma8[ambilight_rgb[2]]));
+    }
+    pixels.show();
+  }
+  else
+    disableAmbilight();
 }
 
 ////////////////////////////////////////////////////
 // Disable ambilight LEDs
 ////////////////////////////////////////////////////
-void disable_ambilight() {
+void disableAmbilight() {
   for (byte i = 115; i < 255; i++) {
     pixels.setPixelColor(i, pixels.Color(0, 0, 0));
   }
@@ -968,7 +1162,7 @@ void disable_ambilight() {
 ////////////////////////////////////////////////////
 // Disable all LEDs
 ////////////////////////////////////////////////////
-void disable_all_led() {
+void disableAllLED() {
   for (byte i = 0; i < 255; i++) {
     pixels.setPixelColor(i, pixels.Color(0, 0, 0));
   }
@@ -978,7 +1172,7 @@ void disable_all_led() {
 ////////////////////////////////////////////////////
 // Display current time (serial monitor)
 ////////////////////////////////////////////////////
-void serial_clock_display()
+void serialClockDisplay()
 {
   // digital clock display of the time
   Serial.print("Current time and date: ");
@@ -1151,14 +1345,15 @@ void sendNTPpacket(IPAddress & address)
 // Check if all LEDs are working properly
 // Sweep through rows, each time with different color
 ////////////////////////////////////////////////////
-void LED_test() {
+void LEDTest() {
 
   byte test_brightness = 150;
 
+  // Clock LEDs
   for (byte n = 0; n <= 3; n++) { // 3 times
     for (byte i = 0; i <= 9; i++) { // rows
 
-      disable_clock_led();
+      disableAllLED();
 
       for (byte j = 0; j <= 10; j++) { // columns
         switch (n) {
@@ -1177,23 +1372,49 @@ void LED_test() {
         }
       }
       pixels.show(); // This sends the updated pixel color to the hardware.
-      delay(400);
+      delay(250);
     }
   }
+
+  // All remaining LED
+
+  for (byte n = 0; n <= 3; n++) { // 3 times
+    disableAllLED();
+
+    for (byte j = 111; j <= MAX_NUM_LEDS; j++) { // columns
+      switch (n) {
+        case 0: // Red
+          pixels.setPixelColor(j - 1, pixels.Color(test_brightness, 0, 0));
+          break;
+        case 1: // Green
+          pixels.setPixelColor(j - 1, pixels.Color(0, test_brightness, 0));
+          break;
+        case 2: // Blue
+          pixels.setPixelColor(j - 1, pixels.Color(0, 0, test_brightness));
+          break;
+        case 3: // White
+          pixels.setPixelColor(j - 1, pixels.Color(test_brightness, test_brightness, test_brightness));
+          break;
+      }
+    }
+    pixels.show(); // This sends the updated pixel color to the hardware.
+    delay(2000);
+  }
+  disableAllLED();
 
 }
 
 ////////////////////////////////////////////////////
 // Display current weekday
 ////////////////////////////////////////////////////
-void show_day() {
+void showDay() {
 
-  disable_clock_led();
+  disableClockLED();
 
   byte day_left = (day() - day() % 10) / 10;
   byte day_right = day() % 10;
-  send_num_2_LED(numbers_left[day_left]);
-  send_num_2_LED(numbers_right[day_right]);
+  sendNum2LED(numbers_left[day_left]);
+  sendNum2LED(numbers_right[day_right]);
 
   pixels.show();
   delay(2000);
@@ -1203,18 +1424,19 @@ void show_day() {
 ////////////////////////////////////////////////////
 // Determine brightness based on sensor data and limits
 ////////////////////////////////////////////////////
-void get_brightness() {
+void getClockBrightness() {
 
   // Read LDR
-  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
-  sensorValue = constrain(sensorValue, 0, 1023);
-  sensorValue = LDR_correction(sensorValue);
-  sensorValue = constrain(sensorValue, min_LDR_value, max_LDR_value);
+  int sensor_value = readSensor();
+  int sensor_value_clock = constrain(sensor_value, min_clock_LDR_value, max_clock_LDR_value);
+  int sensor_value_ambilight = constrain(sensor_value, min_ambilight_LDR_value, max_ambilight_LDR_value);
 
   // Map sensor value
-  v_clock = map(sensorValue, min_LDR_value, max_LDR_value, min_user_brightness * 100, max_user_brightness * 100);
+  v_clock = map(sensor_value_clock, min_clock_LDR_value, max_clock_LDR_value, min_user_clock_brightness * 100, max_user_clock_brightness * 100);
   v_clock = v_clock / 100;
-  v_ambilight = v_clock;
+  
+  v_ambilight = map(sensor_value_ambilight, min_ambilight_LDR_value, max_ambilight_LDR_value, min_user_ambilight_brightness * 100, max_user_ambilight_brightness * 100);
+  v_ambilight = v_ambilight / 100;
 
   // Convert to RGB
   rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
@@ -1222,87 +1444,124 @@ void get_brightness() {
 
   // Print sensor value to serial monitor
   Serial.print("Sensor value: ");
-  Serial.print(sensorValue);
+  Serial.print(sensor_value);
   Serial.print("/1024, Brightness: ");
   Serial.print(", Brightness: ");
   Serial.print(v_clock);
   Serial.println("/1");
-  //  Serial.print("Min LDR: ");
-  //  Serial.print(min_LDR_value);
-  //  Serial.print(", Max LDR: ");
-  //  Serial.println(max_LDR_value);
-  //  Serial.print("Min User: ");
-  //  Serial.print(min_user_brightness);
-  //  Serial.print(", Max User: ");
-  //  Serial.print(max_user_brightness);
+//  Serial.print("Min LDR: ");
+//  Serial.print(min_clock_LDR_value);
+//  Serial.print(", Max LDR: ");
+//  Serial.println(max_clock_LDR_value);
+//  Serial.print("Min User: ");
+//  Serial.print(min_user_clock_brightness);
+//  Serial.print(", Max User: ");
+//  Serial.println(max_user_clock_brightness);
 
 }
 
 ////////////////////////////////////////////////////
-// Set minimum brightness
+// Set minimum clock brightness
 ////////////////////////////////////////////////////
-void set_min_brightness() {
+void setMinClockBrightness() {
 
   // Read the analog in value
-  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
-  sensorValue = constrain(sensorValue, 0, 1023);
-  sensorValue = LDR_correction(sensorValue);
+  int sensor_value = readSensor();
 
   byte temp = (int) (v_clock * 100);
-  EEPROM.write(EEPROM_addr_min_user_brightness, temp); // Min brightness set by user
-  EEPROMWriteInt(EEPROM_addr_LDR_min, sensorValue); // Correspondig LDR value
+  EEPROM.write(EEPROM_addr_min_user_clock_brightness, temp); // Min brightness set by user
+  EEPROMWriteInt(EEPROM_addr_clock_LDR_min, sensor_value); // Correspondig LDR value
   EEPROM.commit();
 
 }
 
 ////////////////////////////////////////////////////
-// Set maximum brightness
+// Set maximum clock brightness
 ////////////////////////////////////////////////////
-void set_max_brightness() {
-  
+void setMaxClockBrightness() {
+
   // Read the analog in value
-  int sensorValue = analogRead(analogInPin); // Value between 0 and 1023
-  sensorValue = constrain(sensorValue, 0, 1023);
-  sensorValue = LDR_correction(sensorValue);
+  int sensor_value = readSensor();
 
   byte temp = (int) (v_clock * 100);
-  EEPROM.write(EEPROM_addr_max_user_brightness, temp); // Max brightness set by user
-  EEPROMWriteInt(EEPROM_addr_LDR_max, sensorValue); // Correspondig LDR value
+  EEPROM.write(EEPROM_addr_max_user_clock_brightness, temp); // Max brightness set by user
+  EEPROMWriteInt(EEPROM_addr_clock_LDR_max, sensor_value); // Correspondig LDR value
   EEPROM.commit();
-  
+
 }
+
+////////////////////////////////////////////////////
+// Set minimum ambilight brightness
+////////////////////////////////////////////////////
+void setMinAmbilightBrightness() {
+
+  // Read the analog in value
+  int sensor_value = readSensor();
+
+  byte temp = (int) (v_ambilight * 100);
+  EEPROM.write(EEPROM_addr_min_user_ambilight_brightness, temp); // Min brightness set by user
+  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_min, sensor_value); // Correspondig LDR value
+  EEPROM.commit();
+
+}
+
+////////////////////////////////////////////////////
+// Set maximum ambilight brightness
+////////////////////////////////////////////////////
+void setMaxAmbilightBrightness() {
+
+  // Read the analog in value
+  int sensor_value = readSensor();
+
+  byte temp = (int) (v_ambilight * 100);
+  EEPROM.write(EEPROM_addr_max_user_ambilight_brightness, temp); // Max brightness set by user
+  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_max, sensor_value); // Correspondig LDR value
+  EEPROM.commit();
+
+}
+
+////////////////////////////////////////////////////
+// Read analog sensor
+////////////////////////////////////////////////////
+int readSensor() {
+  int sensor_value = analogRead(analogInPin); // Value between 0 and 1023
+  sensor_value = constrain(sensor_value, 0, 1023);
+  sensor_value = LDRCorrection(sensor_value);
+  return sensor_value;
+}
+
 
 ////////////////////////////////////////////////////
 // LDR correction
 ////////////////////////////////////////////////////
-int LDR_correction(int sensorValue) {
-  
-  switch (LDR_corr_type) {
-  
-  case 0: // None
-    return sensorValue;
-    break;  
-  
-  case 1: // Square root
-    return pgm_read_word(&LDR_corr_sqrt[sensorValue]);
-    break;
+int LDRCorrection(int sensor_value) {
 
-  case 2: // Logarithmic
-    return pgm_read_word(&LDR_corr_log[sensorValue]);
-    break;
+  switch (LDR_corr_type) {
+
+    case 0: // None
+      return sensor_value;
+      break;
+
+    case 1: // Square root
+      return pgm_read_word(&LDR_corr_sqrt[sensor_value]);
+      break;
+
+    case 2: // Logarithmic
+      return pgm_read_word(&LDR_corr_log[sensor_value]);
+      break;
   }
-  
+
 }
 
 ////////////////////////////////////////////////////
 // Test numbers
 ////////////////////////////////////////////////////
-void test_numbers() {
+void testNumbers() {
   for (byte i = 0; i <= 5; i++) {
     for (byte j = 0; j <= 9; j++) {
-      disable_clock_led();
-      send_num_2_LED(numbers_left[j]);
-      send_num_2_LED(numbers_right[j]);
+      disableClockLED();
+      sendNum2LED(numbers_left[j]);
+      sendNum2LED(numbers_right[j]);
       pixels.show(); // This sends the updated pixel color to the hardware.
       delay(500);
     }
@@ -1357,70 +1616,70 @@ const uint8_t PROGMEM gamma8[] = {
 // LDR correction (logarithm)
 // Function: y = log10(x+1)*1023/log10(1023+1);
 const uint16_t PROGMEM LDR_corr_log[] = {
-0, 102, 162, 204, 237, 264, 287, 306, 324, 339, 353, 366, 378, 389, 399, 409,
-418, 426, 434, 442, 449, 456, 462, 469, 475, 480, 486, 491, 496, 501, 506, 511,
-516, 520, 524, 528, 532, 536, 540, 544, 548, 551, 555, 558, 561, 565, 568, 571,
-574, 577, 580, 583, 585, 588, 591, 594, 596, 599, 601, 604, 606, 609, 611, 613,
-616, 618, 620, 622, 624, 627, 629, 631, 633, 635, 637, 639, 641, 642, 644, 646,
-648, 650, 652, 653, 655, 657, 659, 660, 662, 664, 665, 667, 668, 670, 672, 673,
-675, 676, 678, 679, 681, 682, 684, 685, 686, 688, 689, 691, 692, 693, 695, 696,
-697, 699, 700, 701, 702, 704, 705, 706, 707, 709, 710, 711, 712, 713, 714, 716,
-717, 718, 719, 720, 721, 722, 723, 725, 726, 727, 728, 729, 730, 731, 732, 733,
-734, 735, 736, 737, 738, 739, 740, 741, 742, 743, 744, 745, 746, 747, 748, 749,
-749, 750, 751, 752, 753, 754, 755, 756, 757, 757, 758, 759, 760, 761, 762, 763,
-763, 764, 765, 766, 767, 768, 768, 769, 770, 771, 772, 772, 773, 774, 775, 775,
-776, 777, 778, 778, 779, 780, 781, 781, 782, 783, 784, 784, 785, 786, 787, 787,
-788, 789, 789, 790, 791, 791, 792, 793, 794, 794, 795, 796, 796, 797, 798, 798,
-799, 800, 800, 801, 801, 802, 803, 803, 804, 805, 805, 806, 807, 807, 808, 808,
-809, 810, 810, 811, 811, 812, 813, 813, 814, 814, 815, 816, 816, 817, 817, 818,
-818, 819, 820, 820, 821, 821, 822, 822, 823, 824, 824, 825, 825, 826, 826, 827,
-827, 828, 828, 829, 830, 830, 831, 831, 832, 832, 833, 833, 834, 834, 835, 835,
-836, 836, 837, 837, 838, 838, 839, 839, 840, 840, 841, 841, 842, 842, 843, 843,
-844, 844, 845, 845, 846, 846, 847, 847, 848, 848, 849, 849, 849, 850, 850, 851,
-851, 852, 852, 853, 853, 854, 854, 854, 855, 855, 856, 856, 857, 857, 858, 858,
-858, 859, 859, 860, 860, 861, 861, 862, 862, 862, 863, 863, 864, 864, 864, 865,
-865, 866, 866, 867, 867, 867, 868, 868, 869, 869, 869, 870, 870, 871, 871, 871,
-872, 872, 873, 873, 873, 874, 874, 875, 875, 875, 876, 876, 877, 877, 877, 878,
-878, 879, 879, 879, 880, 880, 880, 881, 881, 882, 882, 882, 883, 883, 883, 884,
-884, 885, 885, 885, 886, 886, 886, 887, 887, 887, 888, 888, 888, 889, 889, 890,
-890, 890, 891, 891, 891, 892, 892, 892, 893, 893, 893, 894, 894, 894, 895, 895,
-895, 896, 896, 896, 897, 897, 897, 898, 898, 899, 899, 899, 900, 900, 900, 900,
-901, 901, 901, 902, 902, 902, 903, 903, 903, 904, 904, 904, 905, 905, 905, 906,
-906, 906, 907, 907, 907, 908, 908, 908, 909, 909, 909, 909, 910, 910, 910, 911,
-911, 911, 912, 912, 912, 913, 913, 913, 913, 914, 914, 914, 915, 915, 915, 916,
-916, 916, 916, 917, 917, 917, 918, 918, 918, 918, 919, 919, 919, 920, 920, 920,
-920, 921, 921, 921, 922, 922, 922, 922, 923, 923, 923, 924, 924, 924, 924, 925,
-925, 925, 926, 926, 926, 926, 927, 927, 927, 928, 928, 928, 928, 929, 929, 929,
-929, 930, 930, 930, 930, 931, 931, 931, 932, 932, 932, 932, 933, 933, 933, 933,
-934, 934, 934, 934, 935, 935, 935, 936, 936, 936, 936, 937, 937, 937, 937, 938,
-938, 938, 938, 939, 939, 939, 939, 940, 940, 940, 940, 941, 941, 941, 941, 942,
-942, 942, 942, 943, 943, 943, 943, 944, 944, 944, 944, 945, 945, 945, 945, 946,
-946, 946, 946, 947, 947, 947, 947, 947, 948, 948, 948, 948, 949, 949, 949, 949,
-950, 950, 950, 950, 951, 951, 951, 951, 952, 952, 952, 952, 952, 953, 953, 953,
-953, 954, 954, 954, 954, 955, 955, 955, 955, 955, 956, 956, 956, 956, 957, 957,
-957, 957, 957, 958, 958, 958, 958, 959, 959, 959, 959, 959, 960, 960, 960, 960,
-961, 961, 961, 961, 961, 962, 962, 962, 962, 963, 963, 963, 963, 963, 964, 964,
-964, 964, 964, 965, 965, 965, 965, 966, 966, 966, 966, 966, 967, 967, 967, 967,
-967, 968, 968, 968, 968, 968, 969, 969, 969, 969, 969, 970, 970, 970, 970, 971,
-971, 971, 971, 971, 972, 972, 972, 972, 972, 973, 973, 973, 973, 973, 974, 974,
-974, 974, 974, 975, 975, 975, 975, 975, 976, 976, 976, 976, 976, 977, 977, 977,
-977, 977, 978, 978, 978, 978, 978, 978, 979, 979, 979, 979, 979, 980, 980, 980,
-980, 980, 981, 981, 981, 981, 981, 982, 982, 982, 982, 982, 983, 983, 983, 983,
-983, 983, 984, 984, 984, 984, 984, 985, 985, 985, 985, 985, 986, 986, 986, 986,
-986, 986, 987, 987, 987, 987, 987, 988, 988, 988, 988, 988, 988, 989, 989, 989,
-989, 989, 990, 990, 990, 990, 990, 990, 991, 991, 991, 991, 991, 991, 992, 992,
-992, 992, 992, 993, 993, 993, 993, 993, 993, 994, 994, 994, 994, 994, 994, 995,
-995, 995, 995, 995, 996, 996, 996, 996, 996, 996, 997, 997, 997, 997, 997, 997,
-998, 998, 998, 998, 998, 998, 999, 999, 999, 999, 999, 999, 1000, 1000, 1000, 1000,
-1000, 1000, 1001, 1001, 1001, 1001, 1001, 1001, 1002, 1002, 1002, 1002, 1002, 1002, 1003, 1003,
-1003, 1003, 1003, 1003, 1004, 1004, 1004, 1004, 1004, 1004, 1005, 1005, 1005, 1005, 1005, 1005,
-1006, 1006, 1006, 1006, 1006, 1006, 1007, 1007, 1007, 1007, 1007, 1007, 1007, 1008, 1008, 1008,
-1008, 1008, 1008, 1009, 1009, 1009, 1009, 1009, 1009, 1010, 1010, 1010, 1010, 1010, 1010, 1010,
-1011, 1011, 1011, 1011, 1011, 1011, 1012, 1012, 1012, 1012, 1012, 1012, 1013, 1013, 1013, 1013,
-1013, 1013, 1013, 1014, 1014, 1014, 1014, 1014, 1014, 1015, 1015, 1015, 1015, 1015, 1015, 1015,
-1016, 1016, 1016, 1016, 1016, 1016, 1016, 1017, 1017, 1017, 1017, 1017, 1017, 1018, 1018, 1018,
-1018, 1018, 1018, 1018, 1019, 1019, 1019, 1019, 1019, 1019, 1019, 1020, 1020, 1020, 1020, 1020,
-1020, 1020, 1021, 1021, 1021, 1021, 1021, 1021, 1021, 1022, 1022, 1022, 1022, 1022, 1022, 1023
+  0, 102, 162, 204, 237, 264, 287, 306, 324, 339, 353, 366, 378, 389, 399, 409,
+  418, 426, 434, 442, 449, 456, 462, 469, 475, 480, 486, 491, 496, 501, 506, 511,
+  516, 520, 524, 528, 532, 536, 540, 544, 548, 551, 555, 558, 561, 565, 568, 571,
+  574, 577, 580, 583, 585, 588, 591, 594, 596, 599, 601, 604, 606, 609, 611, 613,
+  616, 618, 620, 622, 624, 627, 629, 631, 633, 635, 637, 639, 641, 642, 644, 646,
+  648, 650, 652, 653, 655, 657, 659, 660, 662, 664, 665, 667, 668, 670, 672, 673,
+  675, 676, 678, 679, 681, 682, 684, 685, 686, 688, 689, 691, 692, 693, 695, 696,
+  697, 699, 700, 701, 702, 704, 705, 706, 707, 709, 710, 711, 712, 713, 714, 716,
+  717, 718, 719, 720, 721, 722, 723, 725, 726, 727, 728, 729, 730, 731, 732, 733,
+  734, 735, 736, 737, 738, 739, 740, 741, 742, 743, 744, 745, 746, 747, 748, 749,
+  749, 750, 751, 752, 753, 754, 755, 756, 757, 757, 758, 759, 760, 761, 762, 763,
+  763, 764, 765, 766, 767, 768, 768, 769, 770, 771, 772, 772, 773, 774, 775, 775,
+  776, 777, 778, 778, 779, 780, 781, 781, 782, 783, 784, 784, 785, 786, 787, 787,
+  788, 789, 789, 790, 791, 791, 792, 793, 794, 794, 795, 796, 796, 797, 798, 798,
+  799, 800, 800, 801, 801, 802, 803, 803, 804, 805, 805, 806, 807, 807, 808, 808,
+  809, 810, 810, 811, 811, 812, 813, 813, 814, 814, 815, 816, 816, 817, 817, 818,
+  818, 819, 820, 820, 821, 821, 822, 822, 823, 824, 824, 825, 825, 826, 826, 827,
+  827, 828, 828, 829, 830, 830, 831, 831, 832, 832, 833, 833, 834, 834, 835, 835,
+  836, 836, 837, 837, 838, 838, 839, 839, 840, 840, 841, 841, 842, 842, 843, 843,
+  844, 844, 845, 845, 846, 846, 847, 847, 848, 848, 849, 849, 849, 850, 850, 851,
+  851, 852, 852, 853, 853, 854, 854, 854, 855, 855, 856, 856, 857, 857, 858, 858,
+  858, 859, 859, 860, 860, 861, 861, 862, 862, 862, 863, 863, 864, 864, 864, 865,
+  865, 866, 866, 867, 867, 867, 868, 868, 869, 869, 869, 870, 870, 871, 871, 871,
+  872, 872, 873, 873, 873, 874, 874, 875, 875, 875, 876, 876, 877, 877, 877, 878,
+  878, 879, 879, 879, 880, 880, 880, 881, 881, 882, 882, 882, 883, 883, 883, 884,
+  884, 885, 885, 885, 886, 886, 886, 887, 887, 887, 888, 888, 888, 889, 889, 890,
+  890, 890, 891, 891, 891, 892, 892, 892, 893, 893, 893, 894, 894, 894, 895, 895,
+  895, 896, 896, 896, 897, 897, 897, 898, 898, 899, 899, 899, 900, 900, 900, 900,
+  901, 901, 901, 902, 902, 902, 903, 903, 903, 904, 904, 904, 905, 905, 905, 906,
+  906, 906, 907, 907, 907, 908, 908, 908, 909, 909, 909, 909, 910, 910, 910, 911,
+  911, 911, 912, 912, 912, 913, 913, 913, 913, 914, 914, 914, 915, 915, 915, 916,
+  916, 916, 916, 917, 917, 917, 918, 918, 918, 918, 919, 919, 919, 920, 920, 920,
+  920, 921, 921, 921, 922, 922, 922, 922, 923, 923, 923, 924, 924, 924, 924, 925,
+  925, 925, 926, 926, 926, 926, 927, 927, 927, 928, 928, 928, 928, 929, 929, 929,
+  929, 930, 930, 930, 930, 931, 931, 931, 932, 932, 932, 932, 933, 933, 933, 933,
+  934, 934, 934, 934, 935, 935, 935, 936, 936, 936, 936, 937, 937, 937, 937, 938,
+  938, 938, 938, 939, 939, 939, 939, 940, 940, 940, 940, 941, 941, 941, 941, 942,
+  942, 942, 942, 943, 943, 943, 943, 944, 944, 944, 944, 945, 945, 945, 945, 946,
+  946, 946, 946, 947, 947, 947, 947, 947, 948, 948, 948, 948, 949, 949, 949, 949,
+  950, 950, 950, 950, 951, 951, 951, 951, 952, 952, 952, 952, 952, 953, 953, 953,
+  953, 954, 954, 954, 954, 955, 955, 955, 955, 955, 956, 956, 956, 956, 957, 957,
+  957, 957, 957, 958, 958, 958, 958, 959, 959, 959, 959, 959, 960, 960, 960, 960,
+  961, 961, 961, 961, 961, 962, 962, 962, 962, 963, 963, 963, 963, 963, 964, 964,
+  964, 964, 964, 965, 965, 965, 965, 966, 966, 966, 966, 966, 967, 967, 967, 967,
+  967, 968, 968, 968, 968, 968, 969, 969, 969, 969, 969, 970, 970, 970, 970, 971,
+  971, 971, 971, 971, 972, 972, 972, 972, 972, 973, 973, 973, 973, 973, 974, 974,
+  974, 974, 974, 975, 975, 975, 975, 975, 976, 976, 976, 976, 976, 977, 977, 977,
+  977, 977, 978, 978, 978, 978, 978, 978, 979, 979, 979, 979, 979, 980, 980, 980,
+  980, 980, 981, 981, 981, 981, 981, 982, 982, 982, 982, 982, 983, 983, 983, 983,
+  983, 983, 984, 984, 984, 984, 984, 985, 985, 985, 985, 985, 986, 986, 986, 986,
+  986, 986, 987, 987, 987, 987, 987, 988, 988, 988, 988, 988, 988, 989, 989, 989,
+  989, 989, 990, 990, 990, 990, 990, 990, 991, 991, 991, 991, 991, 991, 992, 992,
+  992, 992, 992, 993, 993, 993, 993, 993, 993, 994, 994, 994, 994, 994, 994, 995,
+  995, 995, 995, 995, 996, 996, 996, 996, 996, 996, 997, 997, 997, 997, 997, 997,
+  998, 998, 998, 998, 998, 998, 999, 999, 999, 999, 999, 999, 1000, 1000, 1000, 1000,
+  1000, 1000, 1001, 1001, 1001, 1001, 1001, 1001, 1002, 1002, 1002, 1002, 1002, 1002, 1003, 1003,
+  1003, 1003, 1003, 1003, 1004, 1004, 1004, 1004, 1004, 1004, 1005, 1005, 1005, 1005, 1005, 1005,
+  1006, 1006, 1006, 1006, 1006, 1006, 1007, 1007, 1007, 1007, 1007, 1007, 1007, 1008, 1008, 1008,
+  1008, 1008, 1008, 1009, 1009, 1009, 1009, 1009, 1009, 1010, 1010, 1010, 1010, 1010, 1010, 1010,
+  1011, 1011, 1011, 1011, 1011, 1011, 1012, 1012, 1012, 1012, 1012, 1012, 1013, 1013, 1013, 1013,
+  1013, 1013, 1013, 1014, 1014, 1014, 1014, 1014, 1014, 1015, 1015, 1015, 1015, 1015, 1015, 1015,
+  1016, 1016, 1016, 1016, 1016, 1016, 1016, 1017, 1017, 1017, 1017, 1017, 1017, 1018, 1018, 1018,
+  1018, 1018, 1018, 1018, 1019, 1019, 1019, 1019, 1019, 1019, 1019, 1020, 1020, 1020, 1020, 1020,
+  1020, 1020, 1021, 1021, 1021, 1021, 1021, 1021, 1021, 1022, 1022, 1022, 1022, 1022, 1022, 1023
 };
 
 // LDR correction (sqrt)
