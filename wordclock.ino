@@ -35,16 +35,9 @@ String webPage = "";
 WiFiUDP Udp;
 unsigned int localPort = 8888;  // local port to listen for UDP packets
 
-//time_t getNtpTime();
 static const char ntpServerName[] = "de.pool.ntp.org"; // NTP Server
-//void serialClockDisplay();
-//void printDigits(int digits);
-//void sendNTPpacket(IPAddress &address);
 const int timeZone = 1;     // Central European Time
 int summertime = 0;
-
-int ambimode = 0;
-int led = 0;
 
 // German
 byte es_ist[7] =      {1, 2, 4, 5, 6, 0, 0};
