@@ -11,27 +11,24 @@
 #include <WiFiManager.h>
 #include <RGBConverter.h>
 
-extern const uint8_t gamma8[];
-extern const uint16_t LDR_corr_log[];
-extern const uint16_t LDR_corr_sqrt[];
-
 // Set Pins
 #define PIN D1 // LED data pin
 const int analogInPin = A0;  // Analog input pin that the potentiometer is attached to
 
+// Initialize LEDs
+Adafruit_NeoPixel pixels = Adafruit_NeoPixel(256, PIN, NEO_GRB + NEO_KHZ800);
+const int MAX_NUM_LEDS = 170;
 RGBConverter rgb_conv;
 byte clock_rgb[3];
 byte ambilight_rgb[3];
 double hsv_value_inc = 0.05;
-
-// Initialize LEDs
-Adafruit_NeoPixel pixels = Adafruit_NeoPixel(256, PIN, NEO_GRB + NEO_KHZ800);
-const int MAX_NUM_LEDS = 170;
+extern const uint8_t gamma8[];
+extern const uint16_t LDR_corr_log[];
+extern const uint16_t LDR_corr_sqrt[];
 
 MDNSResponder mdns;
 ESP8266WebServer server(80);
 String webPage = "";
-
 WiFiUDP Udp;
 unsigned int localPort = 8888;  // local port to listen for UDP packets
 
@@ -213,7 +210,7 @@ void setup() {
 
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
-  // Execute this code only once to initialize default values
+//  // Execute this code only once to initialize default values
 //  EEPROM.write(EEPROM_addr_min_user_clock_brightness, 45); // Min brightness set by user
 //  EEPROMWriteInt(EEPROM_addr_clock_LDR_min, 124); // Correspondig LDR value
 //  EEPROM.write(EEPROM_addr_max_user_clock_brightness, 100); // Max brightness set by user
@@ -1442,14 +1439,14 @@ void getClockBrightness() {
   Serial.print(", Brightness: ");
   Serial.print(v_clock);
   Serial.println("/1");
-//  Serial.print("Min LDR: ");
-//  Serial.print(min_clock_LDR_value);
-//  Serial.print(", Max LDR: ");
-//  Serial.println(max_clock_LDR_value);
-//  Serial.print("Min User: ");
-//  Serial.print(min_user_clock_brightness);
-//  Serial.print(", Max User: ");
-//  Serial.println(max_user_clock_brightness);
+  Serial.print("Min LDR: ");
+  Serial.print(min_clock_LDR_value);
+  Serial.print(", Max LDR: ");
+  Serial.println(max_clock_LDR_value);
+  Serial.print("Min User: ");
+  Serial.print(min_user_clock_brightness);
+  Serial.print(", Max User: ");
+  Serial.println(max_user_clock_brightness);
 
 }
 
