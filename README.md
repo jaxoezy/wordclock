@@ -37,7 +37,8 @@ Wiring:
   - 88-78
   - 89-99
   - 110-100
+  - LEDs for single minutes: 111-114
   - All remaining LEDs belong to ambilight
 
 - LDR:
-  - 5V —— LDR —— A0 —— 10k —— GND
+  - 3.3V —— LDR —— A0 —— 10k —— GND
