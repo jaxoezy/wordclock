@@ -141,6 +141,7 @@ int min_ambilight_LDR_value;
 int max_ambilight_LDR_value;
 byte LDR_corr_type;
 byte en_it_is;
+byte en_am_pm;
 byte en_oclock;
 byte en_single_min;
 byte en_ambilight;
@@ -168,22 +169,23 @@ const int EEPROM_addr_min_user_ambilight_brightness = 6;
 const int EEPROM_addr_ambilight_LDR_min = 7; // needs two bytes
 const int EEPROM_addr_max_user_ambilight_brightness = 9;
 const int EEPROM_addr_ambilight_LDR_max = 10; // needs two bytes
-const int EEPROM_addr_es_ist = 12;
-const int EEPROM_addr_uhr = 13;
-const int EEPROM_addr_single_min = 14;
-const int EEPROM_addr_ambilight = 15;
-const int EEPROM_addr_language = 16;
-const int EEPROM_addr_t_night_1 = 17;
-const int EEPROM_addr_t_night_2 = 18;
-const int EEPROM_addr_h_clock = 19;
-const int EEPROM_addr_s_clock = 20;
-const int EEPROM_addr_v_clock = 21;
-const int EEPROM_addr_h_ambilight = 22;
-const int EEPROM_addr_s_ambilight = 23;
-const int EEPROM_addr_v_ambilight = 24;
-const int EEPROM_addr_LDR_corr_type = 25;
-const int EEPROM_addr_ambilight_activation_type = 26;
-const int EEPROM_addr_ambilight_LDR_threshold = 27; // needs two bytes
+const int EEPROM_addr_it_is = 12;
+const int EEPROM_addr_oclock = 13;
+const int EEPROM_addr_am_pm = 14;
+const int EEPROM_addr_single_min = 15;
+const int EEPROM_addr_ambilight = 16;
+const int EEPROM_addr_language = 17;
+const int EEPROM_addr_t_night_1 = 18;
+const int EEPROM_addr_t_night_2 = 19;
+const int EEPROM_addr_h_clock = 20;
+const int EEPROM_addr_s_clock = 21;
+const int EEPROM_addr_v_clock = 22;
+const int EEPROM_addr_h_ambilight = 23;
+const int EEPROM_addr_s_ambilight = 24;
+const int EEPROM_addr_v_ambilight = 25;
+const int EEPROM_addr_LDR_corr_type = 26;
+const int EEPROM_addr_ambilight_activation_type = 27;
+const int EEPROM_addr_ambilight_LDR_threshold = 28; // needs two bytes
 
 ////////////////////////////////////////////////////
 // Setup routine
@@ -219,8 +221,9 @@ void setup() {
 //  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_min, 124); // Correspondig LDR value
 //  EEPROM.write(EEPROM_addr_max_user_ambilight_brightness, 100); // Max brightness set by user
 //  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_max, 912); // Correspondig LDR value
-//  EEPROM.write(EEPROM_addr_es_ist, 1); // "Es ist", default: on
-//  EEPROM.write(EEPROM_addr_uhr, 1); // "Uhr", default: on
+//  EEPROM.write(EEPROM_addr_it_is, 1); // "Es ist", default: on
+//  EEPROM.write(EEPROM_addr_am_pm, 0); // "am/pm", default: off
+//  EEPROM.write(EEPROM_addr_oclock, 1); // "Uhr", default: on
 //  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
 //  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
 //  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
@@ -250,8 +253,9 @@ void setup() {
   max_user_ambilight_brightness = constrain(max_user_ambilight_brightness, 0, 1);
   min_ambilight_LDR_value = EEPROMReadInt(EEPROM_addr_ambilight_LDR_min);
   max_ambilight_LDR_value = EEPROMReadInt(EEPROM_addr_ambilight_LDR_max);
-  en_it_is = EEPROM.read(EEPROM_addr_es_ist);
-  en_oclock = EEPROM.read(EEPROM_addr_uhr);
+  en_it_is = EEPROM.read(EEPROM_addr_it_is);
+  en_am_pm = EEPROM.read(EEPROM_addr_am_pm);
+  en_oclock = EEPROM.read(EEPROM_addr_oclock);
   en_single_min = EEPROM.read(EEPROM_addr_single_min);
   en_ambilight = EEPROM.read(EEPROM_addr_ambilight);
   language = EEPROM.read(EEPROM_addr_language);
@@ -310,6 +314,7 @@ void setup() {
   webPage += "<form action='language'>Language: <select name='language'><option value='0'>German</option><option value='1'>English</option></select><input type='submit' value='Submit'></form>";
   webPage += "<form action='disp_oclock'>Display 'o'clock': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
   webPage += "<form action='disp_it_is'>Display 'It is': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
+  webPage += "<form action='disp_am_pm'>Display am/pm (English only): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
   webPage += "<form action='disp_single_min'>Corner LEDs for single minutes: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
 
   // Ambilight
@@ -507,7 +512,7 @@ void setup() {
     if (state == 1) {
       Serial.println("Display 'o'clock' enabled");
       if (!en_oclock) {
-        EEPROM.write(EEPROM_addr_uhr, 1);
+        EEPROM.write(EEPROM_addr_oclock, 1);
         EEPROM.commit();
         en_oclock = true;
         settings_changed = true;
@@ -516,7 +521,7 @@ void setup() {
     else {
       Serial.println("Display 'o'clock' disabled");
       if (en_oclock) {
-        EEPROM.write(EEPROM_addr_uhr, 0);
+        EEPROM.write(EEPROM_addr_oclock, 0);
         EEPROM.commit();
         en_oclock = false;
         settings_changed = true;
@@ -532,7 +537,7 @@ void setup() {
     if (state == 1) {
       Serial.println("Display 'it is' enabled");
       if (!en_it_is) {
-        EEPROM.write(EEPROM_addr_es_ist, 1);
+        EEPROM.write(EEPROM_addr_it_is, 1);
         EEPROM.commit();
         en_it_is = true;
         settings_changed = true;
@@ -541,9 +546,34 @@ void setup() {
     else {
       Serial.println("Display 'it is' disabled");
       if (en_it_is) {
-        EEPROM.write(EEPROM_addr_es_ist, 0);
+        EEPROM.write(EEPROM_addr_it_is, 0);
         EEPROM.commit();
         en_it_is = false;
+        settings_changed = true;
+      }
+    }
+    delay(1000);
+  });
+
+  // Enable/Disable "am/pm"
+  server.on("/disp_am_pm", []() {
+    server.send(200, "text/html", webPage);
+    int state = server.arg("state").toInt();
+    if (state == 1) {
+      Serial.println("Display 'am/pm' enabled");
+      if (!en_am_pm) {
+        EEPROM.write(EEPROM_addr_am_pm, 1);
+        EEPROM.commit();
+        en_am_pm = true;
+        settings_changed = true;
+      }
+    }
+    else {
+      Serial.println("Display 'am/pm' disabled");
+      if (en_am_pm) {
+        EEPROM.write(EEPROM_addr_am_pm, 0);
+        EEPROM.commit();
+        en_am_pm = false;
         settings_changed = true;
       }
     }
@@ -999,6 +1029,14 @@ void clockDisplay() {
       if (en_it_is)
         sendTime2LED(it_is);
 
+      // Display am/pm
+      if (en_am_pm) {
+        if (isAM())
+          sendTime2LED(am);          
+        else
+          sendTime2LED(pm);
+      }
+
       switch (min_five) {
         case 0:
           sendTime2LED(hours_EN[hours]);
@@ -1439,14 +1477,14 @@ void getClockBrightness() {
   Serial.print(", Brightness: ");
   Serial.print(v_clock);
   Serial.println("/1");
-  Serial.print("Min LDR: ");
-  Serial.print(min_clock_LDR_value);
-  Serial.print(", Max LDR: ");
-  Serial.println(max_clock_LDR_value);
-  Serial.print("Min User: ");
-  Serial.print(min_user_clock_brightness);
-  Serial.print(", Max User: ");
-  Serial.println(max_user_clock_brightness);
+//  Serial.print("Min LDR: ");
+//  Serial.print(min_clock_LDR_value);
+//  Serial.print(", Max LDR: ");
+//  Serial.println(max_clock_LDR_value);
+//  Serial.print("Min User: ");
+//  Serial.print(min_user_clock_brightness);
+//  Serial.print(", Max User: ");
+//  Serial.println(max_user_clock_brightness);
 
 }
 
