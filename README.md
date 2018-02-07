@@ -3,7 +3,7 @@ Word Clock based on Wemos D1 mini / ESP8266
 
 Required board support
 ----------------------
-add http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json as additional board manager URL
+add http://arduino.esp8266.com/versions/2.4.0/package_esp8266com_index.json as additional board manager URL
 
 Required libraries
 ------------------
