@@ -1,30 +1,46 @@
 Word Clock based on Wemos D1 mini / ESP8266
+===========================================
 
-Features:
+Required board support
+----------------------
+add http://arduino.esp8266.com/versions/2.3.0/package_esp8266com_index.json as additional board manager URL
+
+Required libraries
+------------------
+- Adafruid NeoPixel
+- Time
+- ArduinoJson
+- WiFiManager
+- https://github.com/ratkins/RGBConverter
+
+Features
+--------
+
 - LEDs
   - Control of WS2812B LED strip
   - Ambilight
   - Color in HSV
   - Brightness adjusted by LDR
-  
+
 - Time
   - Obtained by NTP
   - Wifimanager used to connect to Wifi
-  
-- Webserver: 
+
+- Webserver:
   - All parameters can be set with simple web server
   - Access to web server: Type wordclock.local in your browser
-  
+
 - Night-time:
   - Word clock LEDs can be switched off at night
   - Start and end time can be set manually
-  
+
 - Others
   - Language: German/English
   - Display of current date
-  
-Wiring:
-  
+
+Wiring
+------
+
 - LED IDs:
   - Rows from top to bottom:
   - 1-11
