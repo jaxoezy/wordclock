@@ -10,9 +10,10 @@
 #include <DNSServer.h>
 #include <WiFiManager.h>
 #include <RGBConverter.h>
+#include <Wire.h>
 
 // Set Pins
-#define PIN D1 // LED data pin
+#define PIN D5 // LED data pin
 const int analogInPin = A0;  // Analog input pin that the potentiometer is attached to
 
 // Initialize LEDs
@@ -39,26 +40,26 @@ int summertime = 0;
 // German
 byte es_ist[7] =      {1, 2, 4, 5, 6, 0, 0};
 byte fuenf_min[7] =   {8, 9, 10, 11, 0, 0, 0};
-byte zehn_min[7] =    {12, 13, 14, 15, 0, 0, 0};
+byte zehn_min[7] =    {19, 20, 21, 22, 0, 0, 0};
 byte viertel_min[7] = {27, 28, 29, 30, 31, 32, 33};
-byte zwanzig_min[7] = {22, 21, 20, 19, 18, 17, 16};
+byte zwanzig_min[7] = {12, 13, 14, 15, 16, 17, 18};
 byte nach[7] =        {34, 35, 36, 37, 0, 0, 0};
-byte vor[7] =         {40, 41, 42, 0, 0, 0, 0};
+byte vor[7] =         {42, 43, 44, 0, 0, 0, 0};
 byte halb[7] =        {45, 46, 47, 48, 0, 0, 0};
-byte ein_std[7] =     {64, 63, 62, 0, 0, 0, 0};
-byte eins_std[7] =    {64, 63, 62, 61, 0, 0, 0};
-byte zwei_std[7] =    {86, 85, 84, 83, 0, 0, 0};
-byte drei_std[7] =    {66, 65, 64, 63, 0, 0, 0};
-byte vier_std[7] =    {67, 68, 69, 70, 0, 0, 0};
-byte fuenf_std[7] =   {74, 75, 76, 77, 0, 0, 0};
-byte sechs_std[7] =   {82, 81, 80, 79, 78, 0, 0};
-byte sieben_std[7] =  {56, 57, 58, 59, 60, 61, 0};
-byte acht_std[7] =    {90, 91, 92, 93, 0, 0, 0};
+byte ein_std[7] =     {66, 65, 64, 0, 0, 0, 0};
+byte eins_std[7] =    {66, 65, 64, 63, 0, 0, 0};
+byte zwei_std[7] =    {56, 57, 58, 59, 0, 0, 0};
+byte drei_std[7] =    {67, 68, 69, 70, 0, 0, 0};
+byte vier_std[7] =    {74, 75, 76, 77, 0, 0, 0};
+byte fuenf_std[7] =   {52, 53, 54, 55, 0, 0, 0};
+byte sechs_std[7] =   {88, 87, 86, 85, 84, 0, 0};
+byte sieben_std[7] =  {89, 90, 91, 92, 93, 94, 0};
+byte acht_std[7] =    {78, 79, 80, 81, 0, 0, 0};
 byte neun_std[7] =    {107, 106, 105, 104, 0, 0, 0};
 byte zehn_std[7] =    {110, 109, 108, 107, 0, 0, 0};
-byte elf_std[7] =     {72, 73, 74, 0, 0, 0, 0};
+byte elf_std[7] =     {50, 51, 52, 0, 0, 0, 0};
 byte zwoelf_std[7] =  {95, 96, 97, 98, 99, 0, 0};
-byte null_std[7] =    {50, 51, 52, 53, 0, 0, 0};
+byte null_std[7] =    {95, 96, 97, 98, 99, 0, 0}; // Keine null Uhr mehr?
 byte uhr[7] =         {102, 101, 100, 0, 0, 0, 0};
 byte* hours_GER[13] = {null_std, eins_std, zwei_std, drei_std, vier_std, fuenf_std, sechs_std, sieben_std, acht_std, neun_std, zehn_std, elf_std, zwoelf_std};
 byte* full_hours_GER[13] = {null_std, ein_std, zwei_std, drei_std, vier_std, fuenf_std, sechs_std, sieben_std, acht_std, neun_std, zehn_std, elf_std, zwoelf_std};
@@ -192,6 +193,9 @@ const int EEPROM_addr_ambilight_LDR_threshold = 28; // needs two bytes
 ////////////////////////////////////////////////////
 void setup() {
   Serial.begin (9600);
+
+  // Start the I2C interface
+  //Wire.begin();
 
   WiFiManager wifiManager;
   //reset settings - for testing
@@ -935,10 +939,7 @@ void clockDisplay() {
   min_five = minutes - single_min;
 
   // Hours
-  if (hours == 12)
-    hours = 12;
-  else
-    hours = hours % 12; // hours modulo 12
+  if (hours > 12) hours = hours % 12;
 
   // Output time depending on language
   switch (language) {
@@ -992,30 +993,35 @@ void clockDisplay() {
           sendTime2LED(nach);
           sendTime2LED(halb);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_GER[hours]);
           break;
         case 40:
           sendTime2LED(zwanzig_min);
           sendTime2LED(vor);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_GER[hours]);
           break;
         case 45:
           sendTime2LED(viertel_min);
           sendTime2LED(vor);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_GER[hours]);
           break;
         case 50:
           sendTime2LED(zehn_min);
           sendTime2LED(vor);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_GER[hours]);
           break;
         case 55:
           sendTime2LED(fuenf_min);
           sendTime2LED(vor);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_GER[hours]);
           break;
       }
@@ -1078,30 +1084,35 @@ void clockDisplay() {
           sendTime2LED(five_min);
           sendTime2LED(to);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_EN[hours]);
           break;
         case 40:
           sendTime2LED(twenty_min);
           sendTime2LED(to);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_EN[hours]);
           break;
         case 45:
           sendTime2LED(quarter_min);
           sendTime2LED(to);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_EN[hours]);
           break;
         case 50:
           sendTime2LED(ten_min);
           sendTime2LED(to);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_EN[hours]);
           break;
         case 55:
           sendTime2LED(five_min);
           sendTime2LED(to);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_EN[hours]);
           break;
       }
