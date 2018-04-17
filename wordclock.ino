@@ -1,16 +1,23 @@
+
 #include <Adafruit_NeoPixel.h>
-#include <TimeLib.h>
-#include <ESP8266WiFi.h>
-#include <WiFiUdp.h>
+//#include <TimeLib.h>
+//#include <ESP8266WiFi.h>
+//#include <WiFiUdp.h>
 //#include <WiFiClient.h>
-#include <ESP8266WebServer.h>
-#include <ESP8266mDNS.h>
+//#include <ESP8266WebServer.h>
+//#include <ESP8266mDNS.h>
 #include <EEPROM.h>
-#include <ArduinoJson.h>
-#include <DNSServer.h>
-#include <WiFiManager.h>
+//#include <ArduinoJson.h>
+//#include <DNSServer.h>
+//#include <WiFiManager.h>
 #include <RGBConverter.h>
 #include <Wire.h>
+#include "RTClib.h"
+#include <Bounce2.h>
+
+RTC_DS3231 rtc;
+const int sclPin = D1;
+const int sdaPin = D2;
 
 // Set Pins
 #define PIN D5 // LED data pin
@@ -26,16 +33,11 @@ double hsv_value_inc = 0.05;
 extern const uint8_t gamma8[];
 extern const uint16_t LDR_corr_log[];
 extern const uint16_t LDR_corr_sqrt[];
+extern const uint16_t LDR_corr_square[];
 
-MDNSResponder mdns;
-ESP8266WebServer server(80);
-String webPage = "";
-WiFiUDP Udp;
-unsigned int localPort = 8888;  // local port to listen for UDP packets
-
-static const char ntpServerName[] = "de.pool.ntp.org"; // NTP Server
-const int timeZone = 1;     // Central European Time
-int summertime = 0;
+#define NUM_BUTTONS 4
+const uint8_t BUTTON_PINS[NUM_BUTTONS] = {2, 0, 12, 13}; // Pins D4, D3, D6, D7
+Bounce * buttons = new Bounce[NUM_BUTTONS];
 
 // German
 byte es_ist[7] =      {1, 2, 4, 5, 6, 0, 0};
@@ -123,14 +125,31 @@ byte right_0[17] = {13, 14, 15, 29, 38, 51, 60, 73, 81, 80, 79, 77, 56, 55, 34, 
 byte* numbers_left[10] = {left_0, left_1, left_2, left_3, left_4, left_5, left_6, left_7, left_8, left_9};
 byte* numbers_right[10] = {right_0, right_1, right_2, right_3, right_4, right_5, right_6, right_7, right_8, right_9};
 
+byte confirm[17] = {32, 36, 52, 60, 72, 84, 70, 64, 12, 46, 0, 0, 0, 0, 0, 0, 0};
+byte back[17] = {31, 37, 51, 61, 73, 81, 97, 71, 85, 91, 49, 41, 25, 21, 13, 101, 109};
+
+// Characters
+byte text_D[17] = {24, 25, 26, 43, 40, 46, 49, 65, 62, 68, 71, 87, 86, 85, 0, 0, 0};
+byte text_E_right[17] = {29, 30, 31, 32, 38, 51, 52, 53, 54, 60, 73, 82, 81, 80, 79, 0, 0};
+byte text_E_left[17] = {24, 25, 26, 27, 43, 46, 47, 48, 49, 65, 68, 87, 86, 85, 84, 0, 0};
+byte text_O_small[17] = {25, 43, 41, 46, 48, 65, 63, 68, 70, 86, 0, 0, 0, 0, 0, 0, 0};
+byte text_O[17] = {25, 26, 43, 40, 46, 49, 65, 62, 68, 71, 86, 85, 0, 0, 0, 0, 0};
+byte text_ff[17] = {28, 29, 39, 50, 51, 61, 72, 83, 31, 32, 36, 53, 54, 58, 75, 80, 0};
+byte text_N[17] = {29, 32, 38, 35, 51, 52, 54, 60, 58, 57, 73, 76, 82, 79, 0, 0, 0};
+
 // LED matrix indices
 byte LED_matrix[10][11];
 byte row_offset[10] = {1, 22, 23, 44, 45, 66, 67, 88, 89, 110};
 
-byte hours = 0;
-byte minutes = 0;
+int hours = 10;
+int minutes = 25;
 byte min_five = 0;
 byte single_min = 0;
+
+byte days;
+byte months;
+int years;
+float temp_rtc;
 
 double min_user_clock_brightness;
 double max_user_clock_brightness;
@@ -161,6 +180,12 @@ double v_ambilight;
 byte ambilight_activation_type;
 int ambilight_LDR_threshold;
 
+byte op_mode = 0;
+const byte PAGE_MAX = 12;
+int pos[PAGE_MAX];
+int page = 0;
+bool page_entry[PAGE_MAX + 1];
+
 // EEPROM address assignment
 const int EEPROM_addr_min_user_clock_brightness = 0;
 const int EEPROM_addr_clock_LDR_min = 1; // needs two bytes
@@ -188,61 +213,70 @@ const int EEPROM_addr_LDR_corr_type = 26;
 const int EEPROM_addr_ambilight_activation_type = 27;
 const int EEPROM_addr_ambilight_LDR_threshold = 28; // needs two bytes
 
-////////////////////////////////////////////////////
-// Setup routine
-////////////////////////////////////////////////////
+int prevMinute = 100;
+
+DateTime now;
+
+
+////////////////////////////////////
+// Setup
+////////////////////////////////////
 void setup() {
-  Serial.begin (9600);
 
-  // Start the I2C interface
-  //Wire.begin();
-
-  WiFiManager wifiManager;
-  //reset settings - for testing
-  //wifiManager.resetSettings();
-
-  //set callback that gets called when connecting to previous WiFi fails, and enters Access Point mode
-  wifiManager.setAPCallback(configModeCallback);
-
-  // Fetches ssid and pass and tries to connect
-  // If it does not connect it starts an access point with the specified name "Wordclock"
-  // and goes into a blocking loop awaiting configuration
-  if (!wifiManager.autoConnect("Wordclock")) {
-    Serial.println("failed to connect and hit timeout");
-    // Reset and try again, or maybe put it to deep sleep
-    ESP.restart(); // originally ESP.reset()
-    delay(1000);
+  Serial.begin(9600);
+  delay(200);
+  Wire.begin(sdaPin, sclPin);
+  delay(200);
+  if (! rtc.begin()) {
+    Serial.println("Couldn't find RTC");
+    while (1);
   }
 
+  // Uncomment this when flashing ESP for the first time
+  //  if (rtc.lostPower()) {
+  //    Serial.println("RTC lost power, lets set the time!");
+  //    // following line sets the RTC to the date & time this sketch was compiled
+  //    rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+  //    // This line sets the RTC with an explicit date & time, for example to set
+  //    // January 21, 2014 at 3am you would call:
+  //    // rtc.adjust(DateTime(2018, 2, 13, 15, 0, 0));
+  //  }
+
+  for (int i = 0; i < NUM_BUTTONS; i++) {
+    buttons[i].attach(BUTTON_PINS[i], INPUT_PULLUP);       //setup the bounce instance for the current button
+    buttons[i].interval(50);              // interval in ms
+  }
+
+  pixels.begin(); // This initializes the NeoPixel library.
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
-//  // Execute this code only once to initialize default values
-//  EEPROM.write(EEPROM_addr_min_user_clock_brightness, 45); // Min brightness set by user
-//  EEPROMWriteInt(EEPROM_addr_clock_LDR_min, 124); // Correspondig LDR value
-//  EEPROM.write(EEPROM_addr_max_user_clock_brightness, 100); // Max brightness set by user
-//  EEPROMWriteInt(EEPROM_addr_clock_LDR_max, 912); // Correspondig LDR value
-//  EEPROM.write(EEPROM_addr_min_user_ambilight_brightness, 45); // Min brightness set by user
-//  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_min, 124); // Correspondig LDR value
-//  EEPROM.write(EEPROM_addr_max_user_ambilight_brightness, 100); // Max brightness set by user
-//  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_max, 912); // Correspondig LDR value
-//  EEPROM.write(EEPROM_addr_it_is, 1); // "Es ist", default: on
-//  EEPROM.write(EEPROM_addr_am_pm, 0); // "am/pm", default: off
-//  EEPROM.write(EEPROM_addr_oclock, 1); // "Uhr", default: on
-//  EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
-//  EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
-//  EEPROM.write(EEPROM_addr_language, 1); // Language: 0: German, 1: English, default: German
-//  EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
-//  EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
-//  EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
-//  EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
-//  EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
-//  EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
-//  EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
-//  EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
-//  EEPROM.write(EEPROM_addr_LDR_corr_type, 0); // LDR correction type, default: 0
-//  EEPROM.write(EEPROM_addr_ambilight_activation_type, 0); // Ambilight activation type, default: 0 (always active)
-//  EEPROMWriteInt(EEPROM_addr_ambilight_LDR_threshold, 1023); // Correspondig LDR value
-//  EEPROM.commit();
+  //    // Execute this code only once to initialize default values
+  //    EEPROM.write(EEPROM_addr_min_user_clock_brightness, 45); // Min brightness set by user
+  //    EEPROMWriteInt(EEPROM_addr_clock_LDR_min, 124); // Correspondig LDR value
+  //    EEPROM.write(EEPROM_addr_max_user_clock_brightness, 100); // Max brightness set by user
+  //    EEPROMWriteInt(EEPROM_addr_clock_LDR_max, 912); // Correspondig LDR value
+  //    EEPROM.write(EEPROM_addr_min_user_ambilight_brightness, 45); // Min brightness set by user
+  //    EEPROMWriteInt(EEPROM_addr_ambilight_LDR_min, 124); // Correspondig LDR value
+  //    EEPROM.write(EEPROM_addr_max_user_ambilight_brightness, 100); // Max brightness set by user
+  //    EEPROMWriteInt(EEPROM_addr_ambilight_LDR_max, 912); // Correspondig LDR value
+  //    EEPROM.write(EEPROM_addr_it_is, 1); // "Es ist", default: on
+  //    EEPROM.write(EEPROM_addr_am_pm, 0); // "am/pm", default: off
+  //    EEPROM.write(EEPROM_addr_oclock, 1); // "Uhr", default: on
+  //    EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
+  //    EEPROM.write(EEPROM_addr_ambilight, 0); // Ambilight, default: off
+  //    EEPROM.write(EEPROM_addr_language, 0); // Language: 0: German, 1: English, default: German
+  //    EEPROM.write(EEPROM_addr_t_night_1, 1); // Starting hour of nighttime, default: 1 am
+  //    EEPROM.write(EEPROM_addr_t_night_2, 7); // Ending hour of nighttime, default: 7 am
+  //    EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
+  //    EEPROM.write(EEPROM_addr_s_clock, 100); // Saturation LED clock, default: 100
+  //    EEPROM.write(EEPROM_addr_v_clock, 75); // Value LED clock, default: 0
+  //    EEPROM.write(EEPROM_addr_h_ambilight, 8); // Hue LED ambilight, default: 0
+  //    EEPROM.write(EEPROM_addr_s_ambilight, 100); // Saturaion LED ambilight, default: 100
+  //    EEPROM.write(EEPROM_addr_v_ambilight, 75); // Value LED ambilight, default: 0
+  //    EEPROM.write(EEPROM_addr_LDR_corr_type, 0); // LDR correction type, default: 0
+  //    EEPROM.write(EEPROM_addr_ambilight_activation_type, 0); // Ambilight activation type, default: 0 (always active)
+  //    EEPROMWriteInt(EEPROM_addr_ambilight_LDR_threshold, 1023); // Correspondig LDR value
+  //    EEPROM.commit();
 
   // Read settings from EEPROM
   min_user_clock_brightness = (double) EEPROM.read(EEPROM_addr_min_user_clock_brightness) / 100;
@@ -297,626 +331,1065 @@ void setup() {
     }
   }
 
-  // Html website for web server
-  webPage += "<h1>Wordclock Web Server</h1>";
-  webPage += "<ul><li>Unless stated otherwise, all settings are stored permanently.</li>";
-  webPage += "<li>HSV format is used for LEDs colors. Check <a href='http://colorizer.org' target='_blank'>Colorizer</a> (HSV/HSB).</li>";
-  webPage += "<li>For brightness calibration, first adjust brightness manually and then select according lightning conditions. One has time for manual brightness adjustment until the clock updates the time, i.e. max. 60 s.</li></ul>";
-
-  // General
-  webPage += "<h2>General</h2>";
-  webPage += "<p>Restart clock: <a href=\"reset\"><button>Submit</button></a></p>";
-
-  // Clock
-  webPage += "<h2>Clock</h2>";
-  webPage += "<form action='clock_leds'>Clock LEDs (temporary): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-  webPage += "<form action='hue_clock'><form> Hue (temporary, 0-360 deg): <input type='number' name='value' min='0' max='360' step='1' value='0'><input type='submit' value='Submit'></form></form>";
-  webPage += "<form action='sat_clock'><form> Saturation (temporary, 0-100 %): <input type='number' name='value' min='0' max='100' step='1' value='100'><input type='submit' value='Submit'></form></form>";
-  webPage += "<p>Save current color permanently: <a href=\"store_color_clock\"><button>Submit</button></a></p>";
-  webPage += "<form action='clock_brightness'>Brightness (temporary, 5 % step): <input type='radio' name='state' value='1'>Increase <input type='radio' name='state' value='0'>Decrease <input type='submit' value='Submit'></form>";
-  webPage += "<form action='calib_clock_brightness'>Calibrate brightness: <input type='radio' name='state' value='1'>Bright room <input type='radio' name='state' value='0'>Dark room <input type='submit' value='Submit'></form>";
-  webPage += "<form action='language'>Language: <select name='language'><option value='0'>German</option><option value='1'>English</option></select><input type='submit' value='Submit'></form>";
-  webPage += "<form action='disp_oclock'>Display 'o'clock': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-  webPage += "<form action='disp_it_is'>Display 'It is': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-  webPage += "<form action='disp_am_pm'>Display am/pm (English only): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-  webPage += "<form action='disp_single_min'>Corner LEDs for single minutes: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-
-  // Ambilight
-  webPage += "<h2>Ambilight</h2>";
-  webPage += "<form action='ambilight'>Ambilight: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-  webPage += "<form action='ambilight_activation'>Ambilight activation: <select name='ambilight_activation'><option value='0'>Always</option><option value='1'>When brightness goes below calibrated value</option></select><input type='submit' value='Submit'></form>";
-  webPage += "<p>Calibrate brightness threshold for ambilight activation: <a href=\"ambilight_LDR_threshold\"><button>Submit</button></a></p>";
-  webPage += "<form action='hue_ambilight'><form> Hue (temporary, 0-360 deg): <input type='number' name='value' min='0' max='360' step='1' value='0'><input type='submit' value='Submit'></form></form>";
-  webPage += "<form action='sat_ambilight'><form> Saturation (temporary, 0-100 %): <input type='number' name='value' min='0' max='100' step='1' value='100'><input type='submit' value='Submit'></form></form>";
-  webPage += "<p>Select same color as clock LEDs (temporary): <a href=\"ambilight_eq_clock_color\"><button>Submit</button></a></p>";
-  webPage += "<p>Save current color permanently: <a href=\"store_color_ambilight\"><button>Submit</button></a></p>";
-  webPage += "<form action='ambilight_brightness'>Brightness (temporary, 5 % step): <input type='radio' name='state' value='1'>Increase <input type='radio' name='state' value='0'>Decrease <input type='submit' value='Submit'></form>";
-  webPage += "<form action='calib_ambilight_brightness'>Calibrate brightness: <input type='radio' name='state' value='1'>Bright room <input type='radio' name='state' value='0'>Dark room <input type='submit' value='Submit'></form>";
-  webPage += "<p>Select same brightness calibration as clock: <a href=\"ambilight_eq_clock_brightness\"><button>Submit</button></a></p>";
-  
-  // Nighttime
-  webPage += "<h2>Night-time</h2>";
-  webPage += "<ul><li>All LEDs are switched off during the specified night-time.</li>";
-  webPage += "<li>Selecting the same start and end time disables night-time mode.</li></ul>";
-  webPage += "<form action='night_start'><form> Start of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='1'><input type='submit' value='Submit'></form></form>";
-  webPage += "<form action='night_end'><form> End of night-time (0-23h): <input type='number' name='value' min='0' max='23' step='1' value='7'><input type='submit' value='Submit'></form></form>";
-  webPage += "<form action='nighttime_temp'>Night-time (temporary): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form></p>";
-
-  // Other settings
-  webPage += "<h2>Other settings</h2>";
-  webPage += "<p>LED test: <a href=\"LEDTest\"><button>Submit</button></a></p>";
-  webPage += "<form action='LDR_corr_type'>Correction light measurement (influences the LED brightness): <select name='LDR_corr_type'><option value='0'>None (linear)</option><option value='1'>Square root</option><option value='2'>Logarithmic</option></select><input type='submit' value='Submit'></form>";
-  webPage += "Show current date (day): <a href=\"day_of_month\"><button>Submit</button></a>";
-
-  pixels.begin(); // This initializes the NeoPixel library.
-
-  Serial.print("IP for web server is ");
-  Serial.println(WiFi.localIP());
-  Serial.println("Starting UDP");
-  Udp.begin(localPort);
-  Serial.print("Local port: ");
-  Serial.println(Udp.localPort());
-  Serial.println("waiting for sync");
-  setSyncProvider(getNtpTime);
-  setSummerTime();
-  setSyncProvider(getNtpTime);
-  // Todo: Test different sync intervals
-  setSyncInterval(300);
-
-  // Connect to wordlock via wordclock.local
-  if (mdns.begin("wordclock", WiFi.localIP())) {
-    Serial.println("MDNS responder started");
-  }
-
-  server.on("/", []() {
-    server.send(200, "text/html", webPage);
-  });
-
-  /////////////////////////////////////
-  // Server: General
-  /////////////////////////////////////
-
-  // Reset
-  server.on("/reset", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Resetting word clock");
-    ESP.reset();
-  });
-
-  /////////////////////////////////////
-  // Server: Clock
-  /////////////////////////////////////
-
-  // Enable/Disable clock LEDs temporarily
-  server.on("/clock_leds", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Enable clock LEDs");
-      en_clock = true;
-    }
-    else {
-      Serial.println("Disable clock LEDs");
-      en_clock = false;
-    }
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Select clock hue
-  server.on("/hue_clock", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    state = map(state, 0, 360, 0, 100);
-    h_clock = double(state) / 100;
-    // Convert to RGB
-    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    settings_changed = true;
-    Serial.print("Clock LED hue is now: ");
-    Serial.print(h_clock);
-    Serial.println(" / 1");
-    delay(1000);
-  });
-
-  // Select clock saturation
-  server.on("/sat_clock", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    s_clock = (double) state / 100;
-    // Convert to RGB
-    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    settings_changed = true;
-    Serial.print("Clock LED saturation is now: ");
-    Serial.print(s_clock);
-    Serial.println(" / 1");
-    delay(1000);
-  });
-
-  // Store current clock color to EEPROM
-  server.on("/store_color_clock", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Saving clock hue and saturation values in EEPROM");
-    byte temp = (int) (h_clock * 100);
-    EEPROM.write(EEPROM_addr_h_clock, temp);
-    Serial.print("Hue: ");
-    Serial.println(temp);
-    temp = (int) (s_clock * 100);
-    EEPROM.write(EEPROM_addr_s_clock, temp);
-    Serial.print("Saturation: ");
-    Serial.println(temp);
-    EEPROM.commit();
-    delay(1000);
-  });
-
-  // Set brightness
-  server.on("/clock_brightness", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-
-    if (state == 1) {
-      Serial.print("Increasing LED brightness to ");
-      v_clock += hsv_value_inc;
-    }
-    else {
-      Serial.print("Decreasing LED brightness to ");
-      v_clock -= hsv_value_inc;
-    }
-
-    v_clock = constrain(v_clock, 0, 1);
-    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-    Serial.println(v_clock);
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Calibrate bright/dark room
-  server.on("/calib_clock_brightness", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Calibrate brightness for bright room");
-      setMaxClockBrightness();
-    }
-    else {
-      Serial.println("Calibrate brightness for dark room");
-      setMinClockBrightness();
-    }
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Set language
-  server.on("/language", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("language").toInt();
-    if (state == 0) {
-      Serial.println("Language: German");
-      if (language) {
-        EEPROM.write(EEPROM_addr_language, 0);
-        EEPROM.commit();
-        language = false;
-        settings_changed = true;
-      }
-    }
-    else {
-      if (!language) {
-        EEPROM.write(EEPROM_addr_language, 1);
-        EEPROM.commit();
-        language = true;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  // Enable/Disable "o'clock"
-  server.on("/disp_oclock", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Display 'o'clock' enabled");
-      if (!en_oclock) {
-        EEPROM.write(EEPROM_addr_oclock, 1);
-        EEPROM.commit();
-        en_oclock = true;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Display 'o'clock' disabled");
-      if (en_oclock) {
-        EEPROM.write(EEPROM_addr_oclock, 0);
-        EEPROM.commit();
-        en_oclock = false;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  // Enable/Disable "It is"
-  server.on("/disp_it_is", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Display 'it is' enabled");
-      if (!en_it_is) {
-        EEPROM.write(EEPROM_addr_it_is, 1);
-        EEPROM.commit();
-        en_it_is = true;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Display 'it is' disabled");
-      if (en_it_is) {
-        EEPROM.write(EEPROM_addr_it_is, 0);
-        EEPROM.commit();
-        en_it_is = false;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  // Enable/Disable "am/pm"
-  server.on("/disp_am_pm", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Display 'am/pm' enabled");
-      if (!en_am_pm) {
-        EEPROM.write(EEPROM_addr_am_pm, 1);
-        EEPROM.commit();
-        en_am_pm = true;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Display 'am/pm' disabled");
-      if (en_am_pm) {
-        EEPROM.write(EEPROM_addr_am_pm, 0);
-        EEPROM.commit();
-        en_am_pm = false;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  // Enable/Disable single minute LEDs
-  server.on("/disp_single_min", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Display single minute LEDs: on");
-      if (!en_single_min) {
-        EEPROM.write(EEPROM_addr_single_min, 1);
-        EEPROM.commit();
-        en_single_min = true;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Display single minute LEDs: off");
-      if (en_single_min) {
-        EEPROM.write(EEPROM_addr_single_min, 0);
-        EEPROM.commit();
-        en_single_min = false;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  /////////////////////////////////////
-  // Server: Ambilight
-  /////////////////////////////////////
-
-  // Enable/Disable ambilight
-  server.on("/ambilight", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Enable ambilight");
-      if (!en_ambilight) {
-        EEPROM.write(EEPROM_addr_ambilight, 1);
-        EEPROM.commit();
-        en_ambilight = true;
-        ambilight();
-      }
-    }
-    else {
-      Serial.println("Disable ambilight");
-      if (en_ambilight) {
-        EEPROM.write(EEPROM_addr_ambilight, 0);
-        EEPROM.commit();
-        en_ambilight = false;
-        disableAmbilight();
-      }
-    }
-    delay(1000);
-  });
-
-  // Select ambilight activation type
-  server.on("/ambilight_activation", []() {
-    server.send(200, "text/html", webPage);
-    ambilight_activation_type = server.arg("ambilight_activation").toInt();
-    EEPROM.write(EEPROM_addr_ambilight_activation_type, ambilight_activation_type);
-    EEPROM.commit();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Set ambilight LDR threshold
-  server.on("/ambilight_LDR_threshold", []() {
-    server.send(200, "text/html", webPage);
-    ambilight_LDR_threshold = readSensor();
-    EEPROMWriteInt(EEPROM_addr_ambilight_LDR_threshold, ambilight_LDR_threshold);
-    EEPROM.commit();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Select ambilight hue
-  server.on("/hue_ambilight", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    state = map(state, 0, 360, 0, 100);
-    h_ambilight = double(state) / 100;
-    // Convert to RGB
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    settings_changed = true;
-    Serial.print("Ambilight LED hue is now: ");
-    Serial.print(h_ambilight);
-    Serial.println(" / 1");
-    delay(1000);
-  });
-
-  // Select ambilight saturation
-  server.on("/sat_ambilight", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    s_ambilight = (double) state / 100;
-    // Convert to RGB
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    settings_changed = true;
-    Serial.print("Ambilight LED saturation is now: ");
-    Serial.print(s_ambilight);
-    Serial.println(" / 1");
-    delay(1000);
-  });
-
-  // Ambilight LEDs obtain same color as clock LEDs
-  server.on("/ambilight_eq_clock_color", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Ambilight: Select same color as clock LEDs and store to EEPROM");
-    h_ambilight = h_clock;
-    s_ambilight = s_clock;
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    byte temp = (int) (h_ambilight * 100);
-    EEPROM.write(EEPROM_addr_h_ambilight, temp);
-    Serial.print("Hue: ");
-    Serial.println(temp);
-    temp = (int) (s_ambilight * 100);
-    EEPROM.write(EEPROM_addr_s_ambilight, temp);
-    Serial.print("Saturation: ");
-    Serial.println(temp);
-    EEPROM.commit();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Store current ambilight color to EEPROM
-  server.on("/store_color_ambilight", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Saving ambilight hue and saturation values in EEPROM");
-    byte temp = (int) (h_ambilight * 100);
-    EEPROM.write(EEPROM_addr_h_ambilight, temp);
-    Serial.print("Hue: ");
-    Serial.println(temp);
-    temp = (int) (s_ambilight * 100);
-    EEPROM.write(EEPROM_addr_s_ambilight, temp);
-    Serial.print("Saturation: ");
-    Serial.println(temp);
-    EEPROM.commit();
-    delay(1000);
-  });
-
-  // Set brightness
-  server.on("/ambilight_brightness", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-
-    if (state == 1) {
-      Serial.print("Increasing ambilight LED brightness to ");
-      v_ambilight += hsv_value_inc;
-    }
-    else {
-      Serial.print("Decreasing ambilight LED brightness to ");
-      v_ambilight -= hsv_value_inc;
-    }
-
-    v_ambilight = constrain(v_ambilight, 0, 1);
-    rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
-    Serial.println(v_ambilight);
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Calibrate bright/dark room
-  server.on("/calib_ambilight_brightness", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Calibrate ambilight brightness for bright room");
-      setMaxAmbilightBrightness();
-    }
-    else {
-      Serial.println("Calibrate ambilight brightness for dark room");
-      setMinAmbilightBrightness();
-    }
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Select same brightness settings for ambilight as clock LED
-  server.on("/ambilight_eq_clock_brightness", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Select same brightness settings for ambilight as clock");    
-    min_user_ambilight_brightness =  min_user_clock_brightness;
-    max_user_ambilight_brightness =  max_user_clock_brightness;
-    min_ambilight_LDR_value = min_clock_LDR_value;
-    max_ambilight_LDR_value = max_clock_LDR_value;
-    EEPROM.write(EEPROM_addr_min_user_ambilight_brightness, min_user_ambilight_brightness);
-    EEPROM.write(EEPROM_addr_max_user_ambilight_brightness, max_user_ambilight_brightness);
-    EEPROM.write(EEPROM_addr_ambilight_LDR_min, min_ambilight_LDR_value);
-    EEPROM.write(EEPROM_addr_ambilight_LDR_max, max_ambilight_LDR_value);
-    EEPROM.commit();    
-    settings_changed = true;
-    delay(1000);
-  });
-  
-  /////////////////////////////////////
-  // Server: Night-time
-  /////////////////////////////////////
-
-  // Start of night-time
-  server.on("/night_start", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    t_night_1 = state;
-    EEPROM.write(EEPROM_addr_t_night_1, t_night_1);
-    EEPROM.commit();
-    Serial.print("Starting night-time at: ");
-    Serial.print(t_night_1);
-    Serial.println(" h");
-    delay(1000);
-  });
-
-  // End of night-time
-  server.on("/night_end", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("value").toInt();
-    t_night_2 = state;
-    EEPROM.write(EEPROM_addr_t_night_2, t_night_2);
-    EEPROM.commit();
-    Serial.print("Ending night-time at: ");
-    Serial.print(t_night_2);
-    Serial.println(" h");
-    delay(1000);
-  });
-
-  // Enable/Disable night-time temporarily
-  server.on("/nighttime_temp", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 0) {
-      Serial.println("Disable night-time temporarily");
-      if (en_nighttime) {
-        en_nighttime = 0;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Enable night-time");
-      if (!en_nighttime) {
-        en_nighttime = 1;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  /////////////////////////////////////
-  // Server: Other settings
-  /////////////////////////////////////
-
-  // LED test
-  server.on("/LEDTest", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Testing all LEDs");
-    LEDTest();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Set LDR correction type
-  server.on("/LDR_corr_type", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("LDR_corr_type").toInt();
-    LDR_corr_type = state;
-    EEPROM.write(EEPROM_addr_LDR_corr_type, LDR_corr_type);
-    EEPROM.commit();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  // Show current day of month
-  server.on("/day_of_month", []() {
-    server.send(200, "text/html", webPage);
-    Serial.println("Displaying day of month");
-    showDay();
-    settings_changed = true;
-    delay(1000);
-  });
-
-  server.begin();
-  Serial.println("HTTP server started");
-
 }
 
-time_t prevDisplay = 0; // when the digital clock was displayed
-
-////////////////////////////////////////////////////
+////////////////////////////////////
 // Main loop
-////////////////////////////////////////////////////
+////////////////////////////////////
 void loop() {
 
-  if (WiFi.status() == WL_CONNECTED) {
+  // Get RTC time
+  now = rtc.now();
+  //days = now.day();
+  //months = now.month();
+  //years = now.year();
+  //minutes = now.minute();
+  //hours = now.hour();
 
-    // Handle Webserver
-    server.handleClient();
-
-    // Execute everything only if minutes or settings have changed
-    if (timeStatus() != timeNotSet) {
-      if ((minute() != prevDisplay || settings_changed)) { // Alternative: now()
-
-        // Check whether nighttime is active
-        if (!nighttime() && en_clock) {
-
-          // Determine LED brightness based on LDR measurement
-          // Only adjust brightness via LDR when minute has changed, not the settings only
-          // This is not very elegant
-          if (!settings_changed)
-            getClockBrightness();
-
-          // Ambilight
-          if (en_ambilight)
-            ambilight();
-          else
-            disableAmbilight();
-
-          // Determine and display time
-          clockDisplay(); // Real clock
-          serialClockDisplay(); // Serial port
-        }
-        else
-          disableAllLED();
-
-        prevDisplay = minute();
-        settings_changed = false;
-
-      }
-    }
-    else {
-      Serial.println("Time not set");
-    }
+  // Read buttons
+  for (int i = 0; i < NUM_BUTTONS; i++)  {
+    buttons[i].update();
   }
-  else
-    ESP.restart();
+
+  // Go to current page
+  switch (op_mode) {
+    case 0: // normal mode
+      normal_op();
+      break;
+
+    case 1: // settings menu
+      switch (page) {
+        case 0: // Page 0: Top level, select an entry
+          page0();
+          break;
+        case 1: // Page 1: Set time
+          page1();
+          break;
+        case 2: // Page 2: Set date
+          page2();
+          break;
+        case 3: // Page 3: Set color
+          page3();
+          break;
+        case 4: // Page 4: Brightness calibration bright room
+          page4();
+          break;
+        case 5: // Page 5: Brightness calibration dark room
+          page5();
+          break;
+        case 6: // Page 6: LDR correction type
+          page6();
+          break;
+        case 7: // Page 7: Night time
+          page7();
+          break;
+        case 8: // Page 8: Language
+          page8();
+          break;
+        case 9: // Page 9: Display 'o'clock'
+          page9();
+          break;
+        case 10: // Page 10: Display 'it is' 
+          page10();
+          break;
+        case 11: // Page 11: Display am/pm (English only)
+          page11();
+          break;
+        case 12: // Page 12: Enable/Disable single minute LEDs
+          page12();
+          break;
+        case 13: // Page 13: LED test
+          page12();
+          break;
+      }
+      break;
+  }
 }
 
+////////////////////////////////////
+// Normal operation
+////////////////////////////////////
+void normal_op() {
+  if (buttons[0].fell()) {
+    if(nighttime())
+      en_nighttime = false; // Temporary, will be activated next morning
+    if(!en_clock)  
+      en_clock = 1;
+    op_mode = 1;
+    page = 0;
+    Serial.println("Enter menu");
+    pos[page] = 0;
+    dispPage();
+  }
+
+  // Display current day of the month
+  if (buttons[1].fell()) {
+    if(nighttime())
+      en_nighttime = false; // Temporary, will be activated next morning
+    if(!en_clock)  
+      en_clock = 1;
+    showDay();
+    settings_changed = true;
+  }
+
+  // Display temperature
+  if (buttons[2].fell()) {
+    temp_rtc = rtc.getTemperature();
+    if(nighttime())
+      en_nighttime = false; // Temporary, will be activated next morning    
+    if(!en_clock)  
+      en_clock = 1;
+    Serial.println(temp_rtc, 2);
+    int int_temp_rtc = (int) temp_rtc;
+    dispNum(int_temp_rtc);
+    delay(3000);
+    settings_changed = true;
+  }
+  
+  // Disable/Enable LEDs 
+  if (buttons[3].fell()) {
+
+    if(en_clock) {
+      en_clock = 0;
+      en_nighttime = true;
+    }
+    else {
+      if(nighttime())
+        en_nighttime = false; // Temporary, will be activated next morning    
+      en_clock = 1;
+    }
+    settings_changed = 1;
+  }
+
+  if ((now.minute() != prevMinute || settings_changed) ) {
+
+    // Check whether nighttime is active
+    if (!nighttime() && en_clock) {
+      getClockBrightness();
+      clockDisplay(); // Real clock
+      serialClockDisplay(); // Serial port
+    }
+    else
+      disableAllLED();
+
+    prevMinute = now.minute();
+    settings_changed = 0;
+
+  }
+}
+
+////////////////////////////////////
+// Settings menu: Top level
+////////////////////////////////////
+void page0() {
+
+  if (page_entry[page]) {
+    dispPage();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    pos[page] = 0;
+    op_mode = 0;
+    Serial.println("Normal mode");
+    settings_changed = true;
+    dispBack();
+    delay(700);
+  }
+
+  if (buttons[1].fell()) {
+    pos[page]--;
+    if (pos[page] < 0) pos[page] = PAGE_MAX - 1;
+    if (pos[page] > PAGE_MAX - 1) pos[page] = 0;
+    Serial.print("Page ");
+    Serial.println(pos[page] + 1);
+    dispPage();
+  }
+  if (buttons[2].fell()) {
+    pos[page]++;
+    if (pos[page] < 0) pos[page] = PAGE_MAX - 1;
+    if (pos[page] > PAGE_MAX - 1) pos[page] = 0;
+    Serial.print("Page ");
+    Serial.println(pos[page] + 1);
+    dispPage();
+  }
+
+  if (buttons[3].fell()) {
+    page = pos[page] + 1;
+    pos[page] = 0;
+    page_entry[page] = true;
+    Serial.print("Enter page ");
+    Serial.println(page);
+    dispConfirm();
+    delay(700);
+  }
+}
+
+////////////////////////////////////
+// Page 1: Set time
+////////////////////////////////////
+void page1() {
+
+  if (page_entry[page]) {
+    minutes = now.minute();
+    hours = now.hour();
+    dispNum(hours);
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Return to menu");
+    dispBack();
+    delay(700);
+  }
+
+  switch (pos[page]) {
+
+    case 0: // hour
+      if (buttons[1].fell()) {
+        hours--;
+        if (hours < 0) hours = 23;
+        if (hours > 23) hours = 0;
+        Serial.print("Hour: ");
+        Serial.println(hours);
+        dispNum(hours);
+      }
+      if (buttons[2].fell()) {
+        hours++;
+        if (hours < 0) hours = 23;
+        if (hours > 23) hours = 0;
+        Serial.print("Hour: ");
+        Serial.println(hours);
+        dispNum(hours);
+      }
+
+      if (buttons[3].fell()) {
+        rtc.adjust(DateTime(now.year(), now.month(), now.day(), hours, now.minute(), now.second()));
+        pos[page] = 1; // go to minutes
+        Serial.print("Set hour to ");
+        Serial.println(hours);
+        Serial.println("Proceed to minutes ");
+        dispConfirm();
+        delay(700);
+        dispNum(minutes);
+      }
+      break;
+
+    case 1: // minute
+      if (buttons[1].fell()) {
+        minutes--;
+        if (minutes < 0) minutes = 59;
+        if (minutes > 59) minutes = 0;
+        Serial.print("Minute: ");
+        Serial.println(minutes);
+        dispNum(minutes);
+      }
+      if (buttons[2].fell()) {
+        minutes++;
+        if (minutes < 0) minutes = 59;
+        if (minutes > 59) minutes = 0;
+        Serial.print("Minute: ");
+        Serial.println(minutes);
+        dispNum(minutes);
+      }
+
+      if (buttons[3].fell()) {
+        rtc.adjust(DateTime(now.year(), now.month(), now.day(), hours, minutes, 0));
+        Serial.print("Set minute to ");
+        Serial.println(minutes);
+        Serial.println("Return to menu");
+        pos[page] = 0;
+        page = 0;
+        page_entry[page] = true;
+        dispConfirm();
+        delay(700);
+      }
+      break;
+  }
+}
+
+////////////////////////////////////
+// Page 2: Set date
+////////////////////////////////////
+void page2() {
+
+  if (page_entry[page]) {
+    days = now.day();
+    months = now.month();
+    years = now.year();
+    years = years-2000;
+    dispNum(years);
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+
+  switch (pos[page]) {
+
+    case 0: // year
+      if (buttons[1].fell()) {
+        years--;
+        if (years < 0) years = 99;
+        if (years > 99) years = 0;
+        Serial.print("Year: ");
+        Serial.println(years);
+        dispNum(years);
+      }
+      if (buttons[2].fell()) {
+        years++;
+        if (years < 0) years = 99;
+        if (years > 99) years = 0;
+        Serial.print("Year: ");
+        Serial.println(years);
+        dispNum(hours);
+      }
+
+      if (buttons[3].fell()) {
+        rtc.adjust(DateTime(2000 + years, now.month(), now.day(), now.hour(), now.minute(), now.second()));
+        pos[page] = 1; // month
+        Serial.print("Set year to ");
+        Serial.println(years);
+        Serial.println("Proceed to day");
+        dispConfirm();
+        delay(700);
+        dispNum(months);
+      }
+      break;
+
+    case 1: // month
+      if (buttons[1].fell()) {
+        months--;
+        if (months < 1) months = 12;
+        if (months > 12) months = 1;
+        Serial.print("Month: ");
+        Serial.println(months);
+        dispNum(months);
+      }
+      if (buttons[2].fell()) {
+        months++;
+        if (months < 1) months = 12;
+        if (months > 12) months = 1;
+        Serial.print("Month: ");
+        Serial.println(months);
+        dispNum(months);
+      }
+
+      if (buttons[3].fell()) {
+        rtc.adjust(DateTime(years, months, now.day(), now.hour(), now.minute(), now.second()));
+        pos[page] = 2; // go to day
+        Serial.print("Set month to ");
+        Serial.println(months);
+        Serial.println("Proceed to day ");
+        dispConfirm();
+        delay(700);
+        dispNum(days);
+      }
+      break;
+
+    case 2: // day, checking Feb. and months with only 30 days
+      if (buttons[1].fell()) {
+        days--;
+        if (days < 1) days = 31;
+        if (days > 31) days = 1;
+        Serial.print("Day: ");
+        Serial.println(days);
+        dispNum(days);
+      }
+      if (buttons[2].fell()) {
+        days++;
+        if (days < 1) days = 31;
+        if (days > 31) days = 1;
+        Serial.print("Day: ");
+        Serial.println(days);
+        dispNum(days);
+      }
+
+      if (buttons[3].fell()) {
+        rtc.adjust(DateTime(years, months, days, now.hour(), now.minute(), now.second()));
+        Serial.print("Set day to ");
+        Serial.println(days);
+        Serial.println("Return to menu");
+        dispConfirm();
+        delay(700);
+        pos[page] = 0;
+        page = 0;
+        page_entry[page] = true;
+      }
+      break;
+  }
+}
+
+////////////////////////////////////
+// Page 3: Set color
+////////////////////////////////////
+void page3() {
+
+  if (page_entry[page]) {
+    s_clock = 1.0;
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    disableAllLED();
+    sendTime2LED(es_ist);
+    sendTime2LED(zwanzig_min);
+    sendTime2LED(vor);
+    sendTime2LED(hours_GER[12]);
+    pixels.show();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    h_clock = (double) EEPROM.read(EEPROM_addr_h_clock) / 100; // Must be in range [0..1]
+    s_clock = (double) EEPROM.read(EEPROM_addr_s_clock) / 100; // Must be in range [0..1]
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+
+  switch (pos[page]) {
+
+    case 0: // hue
+      if (buttons[1].read() == LOW && buttons[2].read() != LOW) {
+        h_clock -= 0.01;
+        if (h_clock < 0) h_clock = 0;
+        if (h_clock > 1) h_clock = 1;
+        rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+        Serial.print("Hue: ");
+        Serial.println(h_clock);
+        sendTime2LED(es_ist);
+        sendTime2LED(zwanzig_min);
+        sendTime2LED(vor);
+        sendTime2LED(hours_GER[12]);
+        pixels.show();
+        delay(100);
+      }
+      if (buttons[2].read() == LOW && buttons[1].read() != LOW) {
+        h_clock += 0.01;
+        if (h_clock < 0) h_clock = 0;
+        if (h_clock > 1) h_clock = 1;
+        rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+        Serial.print("Hue: ");
+        Serial.println(h_clock);
+        sendTime2LED(es_ist);
+        sendTime2LED(zwanzig_min);
+        sendTime2LED(vor);
+        sendTime2LED(hours_GER[12]);
+        pixels.show();
+        delay(100);
+      }
+
+      if (buttons[3].fell()) {
+        Serial.println("Proceed to saturation");
+        pos[page] = 1; // saturation
+        dispConfirm();
+        delay(700);
+        disableAllLED();
+        sendTime2LED(es_ist);
+        sendTime2LED(zwanzig_min);
+        sendTime2LED(vor);
+        sendTime2LED(hours_GER[12]);
+        pixels.show();
+      }
+      break;
+
+    case 1: // saturation
+      if (buttons[1].read() == LOW && buttons[2].read() != LOW) {
+        s_clock -= 0.01;
+        if (s_clock < 0) s_clock = 0;
+        if (s_clock > 1) s_clock = 1;
+        rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+        Serial.print("Saturation: ");
+        Serial.println(s_clock);
+        sendTime2LED(es_ist);
+        sendTime2LED(zwanzig_min);
+        sendTime2LED(vor);
+        sendTime2LED(hours_GER[12]);
+        pixels.show();
+        delay(100);
+      }
+      if (buttons[2].read() == LOW && buttons[1].read() != LOW) {
+        s_clock += 0.01;
+        if (s_clock < 0) s_clock = 0;
+        if (s_clock > 1) s_clock = 1;
+        rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+        Serial.print("Saturation: ");
+        Serial.println(s_clock);
+        sendTime2LED(es_ist);
+        sendTime2LED(zwanzig_min);
+        sendTime2LED(vor);
+        sendTime2LED(hours_GER[12]);
+        pixels.show();
+        delay(100);
+      }
+
+      if (buttons[3].fell()) {
+        byte temp = (int) (s_clock * 100);
+        EEPROM.write(EEPROM_addr_s_clock, temp);
+        temp = (int) (h_clock * 100);
+        EEPROM.write(EEPROM_addr_h_clock, temp);
+        EEPROM.commit();
+        Serial.print("Set hue to ");
+        Serial.println(h_clock);
+        Serial.print("Set saturation to ");
+        Serial.println(s_clock);
+        Serial.println("Return to menu");
+        dispConfirm();
+        delay(700);
+        pos[page] = 0;
+        page = 0;
+        page_entry[page] = true;
+      }
+      break;
+  }
+}
+
+////////////////////////////////////
+// Page 4: Brightness calibration light room
+////////////////////////////////////
+void page4() {
+
+  if (page_entry[page]) {
+    disableAllLED();
+    sendTime2LED(es_ist);
+    sendTime2LED(zwanzig_min);
+    sendTime2LED(vor);
+    sendTime2LED(hours_GER[12]);
+    pixels.show();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+
+  if (buttons[1].read() == LOW && buttons[2].read() != LOW) {
+    v_clock -= 0.01;
+    if (v_clock < 0) v_clock = 0;
+    if (v_clock > 1) v_clock = 1;
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    Serial.print("Brightness: ");
+    Serial.println(v_clock);
+    delay(100);
+    sendTime2LED(es_ist);
+    sendTime2LED(zwanzig_min);
+    sendTime2LED(vor);
+    sendTime2LED(hours_GER[12]);
+    pixels.show();
+    delay(100);
+  }
+  if (buttons[2].read() == LOW && buttons[1].read() != LOW) {
+    v_clock += 0.01;
+    if (v_clock < 0) v_clock = 0;
+    if (v_clock > 1) v_clock = 1;
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    Serial.print("Brightness: ");
+    Serial.println(v_clock);
+    delay(100);
+    sendTime2LED(es_ist);
+    sendTime2LED(zwanzig_min);
+    sendTime2LED(vor);
+    sendTime2LED(hours_GER[12]);
+    pixels.show();
+    delay(100);
+  }
+
+  if (buttons[3].fell()) {
+    byte temp = (int) (v_clock * 100);
+    setMaxClockBrightness();
+    Serial.print("Set brightness for light room to ");
+    Serial.println(v_clock);
+    Serial.println("Return to menu");
+    dispConfirm();
+    delay(700);
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+////////////////////////////////////
+// Page 5: Brightness calibration dark room
+////////////////////////////////////
+void page5() {
+
+  if (page_entry[page]) {
+    disableAllLED();
+    sendTime2LED(es_ist);
+    sendTime2LED(zwanzig_min);
+    sendTime2LED(vor);
+    sendTime2LED(hours_GER[12]);
+    pixels.show();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+  if (buttons[1].read() == LOW && buttons[2].read() != LOW) {
+    v_clock -= 0.01;
+    if (v_clock < 0) v_clock = 0;
+    if (v_clock > 1) v_clock = 1;
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    Serial.print("Brightness: ");
+    Serial.println(v_clock);
+    delay(100);
+    sendTime2LED(es_ist);
+    sendTime2LED(zwanzig_min);
+    sendTime2LED(vor);
+    sendTime2LED(hours_GER[12]);
+    pixels.show();
+  }
+  if (buttons[2].read() == LOW && buttons[1].read() != LOW) {
+    v_clock += 0.01;
+    if (v_clock < 0) v_clock = 0;
+    if (v_clock > 1) v_clock = 1;
+    rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
+    Serial.print("Brightness: ");
+    Serial.println(v_clock);
+    delay(100);
+    sendTime2LED(es_ist);
+    sendTime2LED(zwanzig_min);
+    sendTime2LED(vor);
+    sendTime2LED(hours_GER[12]);
+    pixels.show();
+  }
+
+  if (buttons[3].fell()) {
+    byte temp = (int) (v_clock * 100);
+    setMinClockBrightness();
+    Serial.print("Set brightness for dark room to ");
+    Serial.println(v_clock);
+    Serial.println("Return to menu");
+    dispConfirm();
+    delay(700);
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+////////////////////////////////////
+// Page 6: LDR correction type
+////////////////////////////////////
+void page6() {
+
+  if (page_entry[page]) {
+    dispNum(LDR_corr_type + 1);
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    LDR_corr_type = EEPROM.read(EEPROM_addr_LDR_corr_type);
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+
+  if (buttons[1].fell()) {
+    LDR_corr_type--;
+    if(LDR_corr_type < 0)
+      LDR_corr_type = 0;
+    dispNum(LDR_corr_type + 1);
+  }
+  
+  if (buttons[2].fell()) {
+    LDR_corr_type++;
+    if(LDR_corr_type > 2)
+      LDR_corr_type = 2;
+    dispNum(LDR_corr_type + 1);
+  }
+
+  if (buttons[3].fell()) {
+    EEPROM.write(EEPROM_addr_LDR_corr_type, LDR_corr_type);
+    EEPROM.commit();
+    Serial.print("Set LDR correction type to ");
+    Serial.println(LDR_corr_type);
+    Serial.println("Return to menu");
+    dispConfirm();
+    delay(700);
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+////////////////////////////////////
+// Page 7: Night time
+////////////////////////////////////
+void page7() {
+
+  if (page_entry[page]) {
+    dispNum(t_night_1);
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    t_night_1 = EEPROM.read(EEPROM_addr_t_night_1);
+    t_night_2 = EEPROM.read(EEPROM_addr_t_night_2);
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Return to menu");
+    dispBack();
+    delay(700);
+  }
+
+  switch (pos[page]) {
+
+    case 0: // start of night-time
+      if (buttons[1].fell()) {
+        t_night_1--;
+        if (t_night_1 < 0) t_night_1 = 23;
+        if (t_night_1 > 23) t_night_1 = 0;
+        Serial.print("Starting night-time at: ");
+        Serial.println(t_night_1);
+        dispNum(t_night_1);
+      }
+      if (buttons[2].fell()) {
+        t_night_1++;
+        if (t_night_1 < 0) t_night_1 = 23;
+        if (t_night_1 > 23) t_night_1 = 0;
+        Serial.print("Starting night-time at: ");
+        Serial.println(t_night_1);
+        dispNum(t_night_1);
+      }
+
+      if (buttons[3].fell()) {
+        EEPROM.write(EEPROM_addr_t_night_1, t_night_1);
+        EEPROM.commit();
+        pos[page] = 1; // go to minutes
+        Serial.print("Set start of night-time to ");
+        Serial.println(t_night_1);
+        Serial.println("Proceed to end of night-time ");
+        dispConfirm();
+        delay(700);
+        dispNum(t_night_2);
+      }
+      break;
+
+    case 1: // end of night-time
+      if (buttons[1].fell()) {
+        t_night_2--;
+        if (t_night_2 < 0) t_night_2 = 23;
+        if (t_night_2 > 23) t_night_2 = 0;
+        Serial.print("Ending night-time at: ");
+        Serial.println(t_night_2);
+        dispNum(t_night_2);
+      }
+      if (buttons[2].fell()) {
+        t_night_2++;
+        if (t_night_2 < 0) t_night_2 = 23;
+        if (t_night_2 > 23) t_night_2 = 0;
+        Serial.print("Ending night-time at: ");
+        Serial.println(t_night_2);
+        dispNum(t_night_2);
+      }
+
+      if (buttons[3].fell()) {
+        EEPROM.write(EEPROM_addr_t_night_2, t_night_2);
+        EEPROM.commit();
+        Serial.print("Set end of night-time to ");
+        Serial.println(t_night_2);
+        Serial.println("Return to menu");
+        dispConfirm();
+        delay(700);
+        pos[page] = 0;
+        page = 0;
+        page_entry[page] = true;
+      }
+      break;
+  }
+}
+
+////////////////////////////////////
+// Page 8: Language
+////////////////////////////////////
+void page8() {
+
+  if (page_entry[page]) {
+    if (language)
+      dispEN();
+    else
+      dispDE();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    language = EEPROM.read(EEPROM_addr_language);
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+  if (buttons[1].fell() || buttons[2].fell()) {
+    if (language) {
+      language = 0;
+      Serial.println("Language: German");
+      dispDE();
+    }
+    else {
+      language = 1;
+      Serial.println("Language: English");
+      dispEN();
+    }
+  }
+
+  if (buttons[3].fell()) {
+    EEPROM.write(EEPROM_addr_language, language);
+    EEPROM.commit();
+    Serial.print("Set language to ");
+    Serial.println(language);
+    Serial.println("Return to menu");
+    dispConfirm();
+    delay(700);
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+////////////////////////////////////
+// Page 9: Display 'o'clock'
+////////////////////////////////////
+void page9() {
+
+  if (page_entry[page]) {
+    if (en_oclock)
+      dispON();
+    else
+      dispOFF();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    en_oclock = EEPROM.read(EEPROM_addr_oclock);
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+  if (buttons[1].fell() || buttons[2].fell()) {
+    if (en_oclock) {
+      en_oclock = 0;
+      Serial.println("O'clock disabled");
+      dispOFF();
+    }
+    else {
+      en_oclock = 1;
+      Serial.println("O'clock enabled");
+      dispON();
+    }
+  }
+
+  if (buttons[3].fell()) {
+    EEPROM.write(EEPROM_addr_oclock, en_oclock);
+    EEPROM.commit();
+    Serial.print("Set o'clock to ");
+    Serial.println(en_oclock);
+    Serial.println("Return to menu");
+    dispConfirm();
+    delay(700);
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+
+////////////////////////////////////
+// Page 10: Display 'it is'
+////////////////////////////////////
+void page10() {
+
+  if (page_entry[page]) {
+    if (en_it_is)
+      dispON();
+    else
+      dispOFF();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    en_it_is = EEPROM.read(EEPROM_addr_it_is);
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+  if (buttons[1].fell() || buttons[2].fell()) {
+    if (en_it_is) {
+      en_it_is = 0;
+      Serial.println("'It is' disabled");
+      dispOFF();
+    }
+    else {
+      en_it_is = 1;
+      Serial.println("'It is' enabled");
+      dispON();
+    }
+  }
+
+  if (buttons[3].fell()) {
+    EEPROM.write(EEPROM_addr_it_is, en_it_is);
+    EEPROM.commit();
+    Serial.print("Set 'it is' to ");
+    Serial.println(en_it_is);
+    Serial.println("Return to menu");
+    dispConfirm();
+    delay(700);
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+////////////////////////////////////
+// Page 11: Display am/pm (English only)
+////////////////////////////////////
+void page11() {
+
+  if (page_entry[page]) {
+    if (en_am_pm)
+      dispON();
+    else
+      dispOFF();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    en_am_pm = EEPROM.read(EEPROM_addr_am_pm);
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+
+  if (buttons[1].fell() || buttons[2].fell()) {
+    if (en_am_pm) {
+      en_am_pm = 0;
+      Serial.println("Display 'am/pm' disabled");
+      dispOFF();
+    }
+    else {
+      en_am_pm = 1;
+      Serial.println("Display 'am/pm' enabled");
+      dispON();
+    }
+  }
+
+  if (buttons[3].fell()) {
+    EEPROM.write(EEPROM_addr_am_pm, en_am_pm);
+    EEPROM.commit();
+    Serial.print("Set 'am/pm' to ");
+    Serial.println(en_am_pm);
+    Serial.println("Return to menu");
+    dispConfirm();
+    delay(700);
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+////////////////////////////////////
+// Page 12: Enable/Disable single minute LEDs
+////////////////////////////////////
+void page12() {
+
+  if (page_entry[page]) {
+    if (en_single_min)
+      dispON();
+    else
+      dispOFF();
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    en_single_min = EEPROM.read(EEPROM_addr_single_min);
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+  if (buttons[1].fell() || buttons[2].fell()) {
+    if (en_single_min) {
+      en_single_min = 0;
+      Serial.println("Display single minute LEDs: off");
+      dispOFF();
+    }
+    else {
+      en_single_min = 1;
+      Serial.println("Display single minute LEDs: on");
+      dispON();
+    }
+  }
+
+  if (buttons[3].fell()) {
+    EEPROM.write(EEPROM_addr_single_min, en_single_min);
+    EEPROM.commit();
+    Serial.print("Set 'am/pm' to ");
+    Serial.println(en_single_min);
+    Serial.println("Return to menu");
+    dispConfirm();
+    delay(700);
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+////////////////////////////////////
+// Page 13: LED test
+////////////////////////////////////
+void page13() {
+
+  if (page_entry[page]) {
+    page_entry[page] = false;
+  }
+
+  if (buttons[0].fell()) {
+    page = 0;
+    page_entry[page] = true;
+    Serial.println("Enter menu ");
+    dispBack();
+    delay(700);
+  }
+  if (buttons[1].fell() || buttons[2].fell() || buttons[3].fell()) {
+    Serial.println("Testing all LEDs");
+    LEDTest();
+    pos[page] = 0;
+    page = 0;
+    page_entry[page] = true;
+  }
+}
+
+////////////////////////////////////
+// Page 13: Correction type light measurement
+////////////////////////////////////
+// TODO
 
 ////////////////////////////////////////////////////
 // Determine current time and send data to LEDs
@@ -927,8 +1400,8 @@ void clockDisplay() {
   disableClockLED();
 
   // Get NTP time
-  minutes = minute();
-  hours = hour();
+  minutes = now.minute();
+  hours = now.hour();
 
   // Single minutes
   single_min = minutes % 5;
@@ -939,14 +1412,14 @@ void clockDisplay() {
   min_five = minutes - single_min;
 
   // Hours
-  if (hours > 12) hours = hours % 12;
+  if (hours > 12)
+    hours = hours % 12; // hours modulo 12  
 
   // Output time depending on language
   switch (language) {
 
     // German
     case 0:
-
       // Display "es ist"
       if (en_it_is)
         sendTime2LED(es_ist);
@@ -981,11 +1454,13 @@ void clockDisplay() {
           sendTime2LED(vor);
           sendTime2LED(halb);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_GER[hours]);
           break;
         case 30:
           sendTime2LED(halb);
           hours++;
+          if (hours > 12) hours = hours % 12;
           sendTime2LED(hours_GER[hours]);
           break;
         case 35:
@@ -1025,7 +1500,6 @@ void clockDisplay() {
           sendTime2LED(hours_GER[hours]);
           break;
       }
-
       break;
 
     // English
@@ -1037,8 +1511,8 @@ void clockDisplay() {
 
       // Display am/pm
       if (en_am_pm) {
-        if (isAM())
-          sendTime2LED(am);          
+        if (hours <= 12)
+          sendTime2LED(am);
         else
           sendTime2LED(pm);
       }
@@ -1119,7 +1593,8 @@ void clockDisplay() {
       break;
   }
 
-  pixels.show(); // This sends the updated pixel color to the hardware.
+  pixels.show();
+
 }
 
 ////////////////////////////////////////////////////
@@ -1141,13 +1616,115 @@ void sendTime2LED(byte x[]) {
 }
 
 ////////////////////////////////////////////////////
-// Display numbers
+// Send number data to LED
 ////////////////////////////////////////////////////
 void sendNum2LED(byte x[]) {
   for (byte i = 0; i <= 16; i++) {
     if (x[i] != 0)
       pixels.setPixelColor(x[i] - 1, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
   }
+}
+
+
+////////////////////////////////////////////////////
+// Dispay settings page
+////////////////////////////////////////////////////
+void dispPage() {
+
+  // dispNum(pos[page] + 1);
+  // Alternative:
+  disableAllLED();
+  for (byte i = 0; i <= pos[page]; i++) {
+    pixels.setPixelColor(i, pgm_read_byte(&gamma8[clock_rgb[0]]), pgm_read_byte(&gamma8[clock_rgb[1]]), pgm_read_byte(&gamma8[clock_rgb[2]]));
+  }
+  pixels.show();
+
+}
+
+////////////////////////////////////////////////////
+// Display number
+////////////////////////////////////////////////////
+void dispNum(byte num) {
+
+  disableAllLED();
+
+  byte num_left = (num - num % 10) / 10;
+  byte num_right = num % 10;
+  sendNum2LED(numbers_left[num_left]);
+  sendNum2LED(numbers_right[num_right]);
+
+  pixels.show();
+
+}
+
+////////////////////////////////////////////////////
+// Display DE
+////////////////////////////////////////////////////
+void dispDE() {
+
+  disableAllLED();
+  sendNum2LED(text_D);
+  sendNum2LED(text_E_right);
+  pixels.show();
+
+}
+
+////////////////////////////////////////////////////
+// Display EN
+////////////////////////////////////////////////////
+void dispEN() {
+
+  disableAllLED();
+  sendNum2LED(text_E_left);
+  sendNum2LED(text_N);
+  pixels.show();
+
+}
+
+////////////////////////////////////////////////////
+// Display ON
+////////////////////////////////////////////////////
+void dispON() {
+
+  disableAllLED();
+  sendNum2LED(text_O);
+  sendNum2LED(text_N);
+  pixels.show();
+
+}
+
+////////////////////////////////////////////////////
+// Display OFF
+////////////////////////////////////////////////////
+void dispOFF() {
+
+  disableAllLED();
+  sendNum2LED(text_O_small);
+  sendNum2LED(text_ff);
+  pixels.show();
+
+}
+
+////////////////////////////////////////////////////
+// Display confirm
+////////////////////////////////////////////////////
+void dispConfirm() {
+
+  disableAllLED();
+  sendNum2LED(confirm);
+  pixels.show();
+
+}
+
+////////////////////////////////////////////////////
+// Display back cross
+////////////////////////////////////////////////////
+void dispBack() {
+
+  disableAllLED();
+  sendNum2LED(back);
+  pixels.show();
+
 }
 
 ////////////////////////////////////////////////////
@@ -1157,45 +1734,6 @@ void disableClockLED() {
   for (byte i = 0; i <= 114; i++) {
     pixels.setPixelColor(i, pixels.Color(0, 0, 0));
   }
-}
-
-////////////////////////////////////////////////////
-// Enable ambilight LEDs
-////////////////////////////////////////////////////
-void ambilight() {
-
-  bool enable = false;
-  switch (ambilight_activation_type) {
-
-    case 0: // always active
-      enable = true;
-      break;
-
-    case 1: // Activate when LDR value is below threshold
-      int sensor_value = readSensor();
-      if (sensor_value <= ambilight_LDR_threshold)
-        enable = true;
-      break;
-  }
-
-  if (enable) {
-    for (byte i = 114; i <= MAX_NUM_LEDS; i++) {
-      pixels.setPixelColor(i - 1, pgm_read_byte(&gamma8[ambilight_rgb[0]]), pgm_read_byte(&gamma8[ambilight_rgb[1]]), pgm_read_byte(&gamma8[ambilight_rgb[2]]));
-    }
-    pixels.show();
-  }
-  else
-    disableAmbilight();
-}
-
-////////////////////////////////////////////////////
-// Disable ambilight LEDs
-////////////////////////////////////////////////////
-void disableAmbilight() {
-  for (byte i = 115; i < 255; i++) {
-    pixels.setPixelColor(i, pixels.Color(0, 0, 0));
-  }
-  pixels.show();
 }
 
 ////////////////////////////////////////////////////
@@ -1215,15 +1753,15 @@ void serialClockDisplay()
 {
   // digital clock display of the time
   Serial.print("Current time and date: ");
-  Serial.print(hour());
-  printDigits(minute());
-  printDigits(second());
+  Serial.print(now.hour());
+  printDigits(now.minute());
+  printDigits(now.second());
   Serial.print(", ");
-  Serial.print(day());
+  Serial.print(now.day());
   Serial.print(".");
-  Serial.print(month());
+  Serial.print(now.month());
   Serial.print(".");
-  Serial.print(year());
+  Serial.print(now.year());
   Serial.print(" ");
   //Serial.print(" Summertime: ");
   //Serial.print(summertime);
@@ -1255,7 +1793,7 @@ boolean nighttime() {
       return false;
     // t_1 before mignight, t_2 after midnight
     else if (t_night_1 > t_night_2) {
-      if (hour() >= t_night_1 || hour() < t_night_2)
+      if (now.hour() >= t_night_1 || now.hour() < t_night_2)
         return true;
       else {
         en_nighttime = 1; // Enable nighttime again during the day
@@ -1264,7 +1802,7 @@ boolean nighttime() {
     }
     // t_1 and t_2 after midnight
     else if (t_night_1 < t_night_2) {
-      if (hour() >= t_night_1 && hour() < t_night_2)
+      if (now.hour() >= t_night_1 && now.hour() < t_night_2)
         return true;
       else {
         en_nighttime = 1; // Enable nighttime again during the day
@@ -1275,109 +1813,6 @@ boolean nighttime() {
   else
     return false;
 
-}
-
-////////////////////////////////////////////////////
-// Determine offset due to German summertime
-////////////////////////////////////////////////////
-// Switch to summertime at last Sunday of March
-// Switch to wintertime at last Sunday of October
-void setSummerTime() {
-  if (month() >= 3 && month() <= 10) {
-    switch (month()) {
-      // March
-      case 3:
-        if (day() > 31 - (7 - weekday()))
-          summertime = 1;
-        else
-          summertime = 0;
-        break;
-      // October
-      case 10:
-        if (day() > 31 - (7 - weekday()))
-          summertime = 0;
-        else
-          summertime = 1;
-        break;
-      default:
-        summertime = 1;
-    }
-  }
-  else {
-    summertime = 0;
-  }
-}
-
-////////////////////////////////////////////////////
-// Wifimanager
-////////////////////////////////////////////////////
-void configModeCallback (WiFiManager *myWiFiManager) {
-  Serial.println("Entered config mode");
-  Serial.println(WiFi.softAPIP());
-  //if you used auto generated SSID, print it
-  Serial.println(myWiFiManager->getConfigPortalSSID());
-}
-
-////////////////////////////////////////////////////
-// NTP code
-////////////////////////////////////////////////////
-const int NTP_PACKET_SIZE = 48; // NTP time is in the first 48 bytes of message
-byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
-
-time_t getNtpTime()
-{
-  IPAddress ntpServerIP; // NTP server's ip address
-
-  while (Udp.parsePacket() > 0) ; // discard any previously received packets
-  Serial.println("Transmit NTP Request");
-  // get a random server from the pool
-  WiFi.hostByName(ntpServerName, ntpServerIP);
-  Serial.print(ntpServerName);
-  Serial.print(": ");
-  Serial.println(ntpServerIP);
-  sendNTPpacket(ntpServerIP);
-  uint32_t beginWait = millis();
-  while (millis() - beginWait < 1500) {
-    int size = Udp.parsePacket();
-    if (size >= NTP_PACKET_SIZE) {
-      Serial.println("Receive NTP Response");
-      Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
-      unsigned long secsSince1900;
-      // convert four bytes starting at location 40 to a long integer
-      secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
-      secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
-      secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
-      secsSince1900 |= (unsigned long)packetBuffer[43];
-      return secsSince1900 - 2208988800UL + (timeZone + summertime) * SECS_PER_HOUR;
-    }
-  }
-  Serial.println("No NTP Response :-(");
-  return 0; // return 0 if unable to get the time
-}
-
-////////////////////////////////////////////////////
-// Send an NTP request to the time server at the given address
-////////////////////////////////////////////////////
-void sendNTPpacket(IPAddress & address)
-{
-  // set all bytes in the buffer to 0
-  memset(packetBuffer, 0, NTP_PACKET_SIZE);
-  // Initialize values needed to form NTP request
-  // (see URL above for details on the packets)
-  packetBuffer[0] = 0b11100011;   // LI, Version, Mode
-  packetBuffer[1] = 0;     // Stratum, or type of clock
-  packetBuffer[2] = 6;     // Polling Interval
-  packetBuffer[3] = 0xEC;  // Peer Clock Precision
-  // 8 bytes of zero for Root Delay & Root Dispersion
-  packetBuffer[12] = 49;
-  packetBuffer[13] = 0x4E;
-  packetBuffer[14] = 49;
-  packetBuffer[15] = 52;
-  // all NTP fields have been given values, now
-  // you can send a packet requesting a timestamp:
-  Udp.beginPacket(address, 123); //NTP requests are to port 123
-  Udp.write(packetBuffer, NTP_PACKET_SIZE);
-  Udp.endPacket();
 }
 
 ////////////////////////////////////////////////////
@@ -1450,8 +1885,8 @@ void showDay() {
 
   disableClockLED();
 
-  byte day_left = (day() - day() % 10) / 10;
-  byte day_right = day() % 10;
+  byte day_left = (now.day() - now.day() % 10) / 10;
+  byte day_right = now.day() % 10;
   sendNum2LED(numbers_left[day_left]);
   sendNum2LED(numbers_right[day_right]);
 
@@ -1465,21 +1900,29 @@ void showDay() {
 ////////////////////////////////////////////////////
 void getClockBrightness() {
 
+  // Read EEPROM
+  min_user_clock_brightness = (double) EEPROM.read(EEPROM_addr_min_user_clock_brightness); // /100
+  max_user_clock_brightness = (double) EEPROM.read(EEPROM_addr_max_user_clock_brightness); // /100
+  min_user_clock_brightness = constrain(min_user_clock_brightness, 0, 100);
+  max_user_clock_brightness = constrain(max_user_clock_brightness, 0, 100);
+  min_clock_LDR_value = EEPROMReadInt(EEPROM_addr_clock_LDR_min);
+  max_clock_LDR_value = EEPROMReadInt(EEPROM_addr_clock_LDR_max);
+
   // Read LDR
   int sensor_value = readSensor();
   int sensor_value_clock = constrain(sensor_value, min_clock_LDR_value, max_clock_LDR_value);
   int sensor_value_ambilight = constrain(sensor_value, min_ambilight_LDR_value, max_ambilight_LDR_value);
 
   // Map sensor value
-  v_clock = map(sensor_value_clock, min_clock_LDR_value, max_clock_LDR_value, min_user_clock_brightness * 100, max_user_clock_brightness * 100);
+  v_clock = map(sensor_value_clock, min_clock_LDR_value, max_clock_LDR_value, min_user_clock_brightness, max_user_clock_brightness);
   v_clock = v_clock / 100;
-  
-  v_ambilight = map(sensor_value_ambilight, min_ambilight_LDR_value, max_ambilight_LDR_value, min_user_ambilight_brightness * 100, max_user_ambilight_brightness * 100);
-  v_ambilight = v_ambilight / 100;
+
+  //v_ambilight = map(sensor_value_ambilight, min_ambilight_LDR_value, max_ambilight_LDR_value, min_user_ambilight_brightness * 100, max_user_ambilight_brightness * 100);
+  //v_ambilight = v_ambilight / 100;
 
   // Convert to RGB
   rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
-  rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
+  //rgb_conv.hsvToRgb(h_ambilight, s_ambilight, v_ambilight, ambilight_rgb);
 
   // Print sensor value to serial monitor
   Serial.print("Sensor value: ");
@@ -1488,14 +1931,14 @@ void getClockBrightness() {
   Serial.print(", Brightness: ");
   Serial.print(v_clock);
   Serial.println("/1");
-//  Serial.print("Min LDR: ");
-//  Serial.print(min_clock_LDR_value);
-//  Serial.print(", Max LDR: ");
-//  Serial.println(max_clock_LDR_value);
-//  Serial.print("Min User: ");
-//  Serial.print(min_user_clock_brightness);
-//  Serial.print(", Max User: ");
-//  Serial.println(max_user_clock_brightness);
+  //  Serial.print("Min LDR: ");
+  //  Serial.print(min_clock_LDR_value);
+  //  Serial.print(", Max LDR: ");
+  //  Serial.println(max_clock_LDR_value);
+  //  Serial.print("Min User: ");
+  //  Serial.print(min_user_clock_brightness);
+  //  Serial.print(", Max User: ");
+  //  Serial.println(max_user_clock_brightness);
 
 }
 
@@ -1585,11 +2028,14 @@ int LDRCorrection(int sensor_value) {
       return pgm_read_word(&LDR_corr_sqrt[sensor_value]);
       break;
 
-    case 2: // Logarithmic
-      return pgm_read_word(&LDR_corr_log[sensor_value]);
+    case 2: // Square
+      return pgm_read_word(&LDR_corr_square[sensor_value]);
       break;
+      
+//  case 2: // Logarithmic
+//    return pgm_read_word(&LDR_corr_log[sensor_value]);
+//    break;
   }
-
 }
 
 ////////////////////////////////////////////////////
@@ -1602,7 +2048,7 @@ void testNumbers() {
       sendNum2LED(numbers_left[j]);
       sendNum2LED(numbers_right[j]);
       pixels.show(); // This sends the updated pixel color to the hardware.
-      delay(500);
+      delay(700);
     }
   }
 }
@@ -1790,3 +2236,81 @@ const uint16_t PROGMEM LDR_corr_sqrt[] = {
   1015, 1015, 1016, 1016, 1017, 1017, 1018, 1018, 1019, 1019, 1020, 1020, 1021, 1021, 1022, 1023
 };
 
+// LDR correction (square)
+// Function: y = ;
+// x = linspace(0,1023,1024);
+// y = 1/1023*x.^2;
+// for i=1:64
+// tmp = num2str(floor(y((i-1)*16+1)));
+// for j=2:16
+// tmp = [tmp ', ' num2str(floor(y((i-1)*16+j)))];
+// end
+// mat{i} = tmp;
+// disp(tmp)
+// end
+const uint16_t PROGMEM LDR_corr_square[] = {
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 1, 2, 2,
+2, 2, 2, 2, 2, 2, 2, 2, 3, 3, 3, 3, 3, 3, 3, 3,
+4, 4, 4, 4, 4, 4, 4, 4, 5, 5, 5, 5, 5, 5, 5, 6,
+6, 6, 6, 6, 6, 7, 7, 7, 7, 7, 7, 8, 8, 8, 8, 8,
+9, 9, 9, 9, 9, 9, 10, 10, 10, 10, 10, 11, 11, 11, 11, 12,
+12, 12, 12, 12, 13, 13, 13, 13, 14, 14, 14, 14, 15, 15, 15, 15,
+16, 16, 16, 16, 17, 17, 17, 17, 18, 18, 18, 18, 19, 19, 19, 19,
+20, 20, 20, 21, 21, 21, 21, 22, 22, 22, 23, 23, 23, 24, 24, 24,
+25, 25, 25, 25, 26, 26, 26, 27, 27, 27, 28, 28, 28, 29, 29, 29,
+30, 30, 30, 31, 31, 32, 32, 32, 33, 33, 33, 34, 34, 34, 35, 35,
+36, 36, 36, 37, 37, 37, 38, 38, 39, 39, 39, 40, 40, 41, 41, 41,
+42, 42, 43, 43, 43, 44, 44, 45, 45, 46, 46, 46, 47, 47, 48, 48,
+49, 49, 49, 50, 50, 51, 51, 52, 52, 53, 53, 53, 54, 54, 55, 55,
+56, 56, 57, 57, 58, 58, 59, 59, 60, 60, 61, 61, 62, 62, 63, 63,
+64, 64, 65, 65, 66, 66, 67, 67, 68, 68, 69, 69, 70, 70, 71, 71,
+72, 72, 73, 73, 74, 75, 75, 76, 76, 77, 77, 78, 78, 79, 79, 80,
+81, 81, 82, 82, 83, 83, 84, 85, 85, 86, 86, 87, 87, 88, 89, 89,
+90, 90, 91, 92, 92, 93, 93, 94, 95, 95, 96, 96, 97, 98, 98, 99,
+100, 100, 101, 101, 102, 103, 103, 104, 105, 105, 106, 107, 107, 108, 109, 109,
+110, 111, 111, 112, 113, 113, 114, 115, 115, 116, 117, 117, 118, 119, 119, 120,
+121, 121, 122, 123, 123, 124, 125, 125, 126, 127, 128, 128, 129, 130, 130, 131,
+132, 133, 133, 134, 135, 136, 136, 137, 138, 138, 139, 140, 141, 141, 142, 143,
+144, 144, 145, 146, 147, 147, 148, 149, 150, 150, 151, 152, 153, 154, 154, 155,
+156, 157, 157, 158, 159, 160, 161, 161, 162, 163, 164, 165, 165, 166, 167, 168,
+169, 169, 170, 171, 172, 173, 174, 174, 175, 176, 177, 178, 179, 179, 180, 181,
+182, 183, 184, 184, 185, 186, 187, 188, 189, 190, 190, 191, 192, 193, 194, 195,
+196, 197, 197, 198, 199, 200, 201, 202, 203, 204, 205, 205, 206, 207, 208, 209,
+210, 211, 212, 213, 214, 215, 215, 216, 217, 218, 219, 220, 221, 222, 223, 224,
+225, 226, 227, 228, 228, 229, 230, 231, 232, 233, 234, 235, 236, 237, 238, 239,
+240, 241, 242, 243, 244, 245, 246, 247, 248, 249, 250, 251, 252, 253, 254, 255,
+256, 257, 258, 259, 260, 261, 262, 263, 264, 265, 266, 267, 268, 269, 270, 271,
+272, 273, 274, 275, 276, 277, 278, 279, 280, 281, 282, 283, 285, 286, 287, 288,
+289, 290, 291, 292, 293, 294, 295, 296, 297, 298, 300, 301, 302, 303, 304, 305,
+306, 307, 308, 309, 310, 312, 313, 314, 315, 316, 317, 318, 319, 320, 322, 323,
+324, 325, 326, 327, 328, 329, 331, 332, 333, 334, 335, 336, 337, 339, 340, 341,
+342, 343, 344, 346, 347, 348, 349, 350, 351, 353, 354, 355, 356, 357, 358, 360,
+361, 362, 363, 364, 366, 367, 368, 369, 370, 372, 373, 374, 375, 376, 378, 379,
+380, 381, 383, 384, 385, 386, 387, 389, 390, 391, 392, 394, 395, 396, 397, 399,
+400, 401, 402, 404, 405, 406, 407, 409, 410, 411, 413, 414, 415, 416, 418, 419,
+420, 421, 423, 424, 425, 427, 428, 429, 430, 432, 433, 434, 436, 437, 438, 440,
+441, 442, 444, 445, 446, 448, 449, 450, 452, 453, 454, 456, 457, 458, 460, 461,
+462, 464, 465, 466, 468, 469, 470, 472, 473, 474, 476, 477, 478, 480, 481, 483,
+484, 485, 487, 488, 489, 491, 492, 494, 495, 496, 498, 499, 501, 502, 503, 505,
+506, 508, 509, 510, 512, 513, 515, 516, 518, 519, 520, 522, 523, 525, 526, 528,
+529, 530, 532, 533, 535, 536, 538, 539, 541, 542, 544, 545, 546, 548, 549, 551,
+552, 554, 555, 557, 558, 560, 561, 563, 564, 566, 567, 569, 570, 572, 573, 575,
+576, 578, 579, 581, 582, 584, 585, 587, 588, 590, 591, 593, 594, 596, 597, 599,
+600, 602, 603, 605, 606, 608, 610, 611, 613, 614, 616, 617, 619, 620, 622, 624,
+625, 627, 628, 630, 631, 633, 635, 636, 638, 639, 641, 642, 644, 646, 647, 649,
+650, 652, 654, 655, 657, 658, 660, 662, 663, 665, 666, 668, 670, 671, 673, 675,
+676, 678, 679, 681, 683, 684, 686, 688, 689, 691, 693, 694, 696, 697, 699, 701,
+702, 704, 706, 707, 709, 711, 712, 714, 716, 717, 719, 721, 722, 724, 726, 728,
+729, 731, 733, 734, 736, 738, 739, 741, 743, 744, 746, 748, 750, 751, 753, 755,
+756, 758, 760, 762, 763, 765, 767, 769, 770, 772, 774, 776, 777, 779, 781, 783,
+784, 786, 788, 790, 791, 793, 795, 797, 798, 800, 802, 804, 805, 807, 809, 811,
+813, 814, 816, 818, 820, 821, 823, 825, 827, 829, 830, 832, 834, 836, 838, 840,
+841, 843, 845, 847, 849, 850, 852, 854, 856, 858, 860, 861, 863, 865, 867, 869,
+871, 872, 874, 876, 878, 880, 882, 884, 885, 887, 889, 891, 893, 895, 897, 899,
+900, 902, 904, 906, 908, 910, 912, 914, 915, 917, 919, 921, 923, 925, 927, 929,
+931, 933, 934, 936, 938, 940, 942, 944, 946, 948, 950, 952, 954, 956, 958, 960,
+961, 963, 965, 967, 969, 971, 973, 975, 977, 979, 981, 983, 985, 987, 989, 991,
+993, 995, 997, 999, 1001, 1003, 1005, 1007, 1009, 1011, 1013, 1015, 1017, 1019, 1021, 1023
+};
