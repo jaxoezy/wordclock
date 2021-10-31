@@ -9,12 +9,11 @@ Things that i've changed from the original:
   - Removed ambilight futures
   - removed english & german language for readability
   - added nighttime monday till sunday
-  - added option 'summertime' in the HMI, and removed automaticly by date
+  - added option 'summertime' in the HTTP site, and removed automaticly by date
+  - print IP adres for HTTP site when startingup -> for when MDNS doesn't work on router
   - nighttime and other settings will display the current value in the hmi.
     - Issue: When a new value is entered the page needs a manual refresh before the new value is displayed
-
-Currently still busy with:
-  - Getting the clock to count offline
+   - Getting the clock to count offline
     - This kinda works, when we don't get a NTP response, i add the sync interval time to the old time
     - When we don't have wifi at all, i skip trying to get a random server by the pool, because this takes to long (+-8 sec for each request) 
  
@@ -67,17 +66,17 @@ Wiring
 
 - LED IDs:
   - Rows from top to bottom:
-  - 1-11
-  - 22-12
-  - 23-33
-  - 44-34
-  - 45-55
-  - 66-56
-  - 67-77
-  - 88-78
-  - 89-99
-  - 110-100
-  - LEDs for single minutes: 111-114
+  - 2-12
+  - 24-14
+  - 25-35
+  - 46-36
+  - 47-57
+  - 68-58
+  - 69-79
+  - 90-80
+  - 91-101
+  - 113-103
+  - LEDs for single minutes: 1 - 13 - 102 - 114
   - All remaining LEDs belong to ambilight
 
 - LDR:
