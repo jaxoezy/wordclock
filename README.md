@@ -41,24 +41,24 @@ Features
 
 - LEDs
   - Control of WS2812B LED strip
-  - Ambilight
   - Color in HSV
-  - Brightness adjusted by LDR
+  - Brightness adjusted in settings
 
 - Time
   - Obtained by NTP
   - Wifimanager used to connect to Wifi
+  - Once it has the time, it will continue to work offline
 
 - Webserver:
   - All parameters can be set with simple web server
-  - Access to web server: Type wordclock.local in your browser
+  - Access to web server: Type wordclock.local in your browser or use the Ip adres
 
 - Night-time:
-  - Word clock LEDs can be switched off at night
+  - Word clock LEDs can be switched off at night. Settings for every day of the week
   - Start and end time can be set manually
 
 - Others
-  - Language: German/English
+  - Language: dutch
   - Display of current date
 
 Wiring
@@ -79,5 +79,5 @@ Wiring
   - LEDs for single minutes: 1 - 13 - 102 - 114
   - All remaining LEDs belong to ambilight
 
-- LDR:
-  - 3.3V —— LDR —— A0 —— 10k —— GND
+
+- Removed LDR from hardware & code.  
