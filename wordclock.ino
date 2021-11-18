@@ -28,7 +28,7 @@ ESP8266WebServer server(80);
 String webPage = "WordClock";
 WiFiUDP Udp;
 unsigned int localPort = 8888;  // local port to listen for UDP packets
-unsigned long OldTimeSinds1900 = 0;
+unsigned long long OldTimeSinds1900 = 0;
 int SyncTime;
 static const char ntpServerName[] = "nl.pool.ntp.org"; // NTP Server
 const int timeZone = 1;     // Central European Time
@@ -69,6 +69,11 @@ byte min_3[7] =       {1,  13, 102,  0, 0, 0, 0};
 byte min_4[7] =       {1,  13, 102, 114, 0, 0, 0};
 byte* single_mins[4] = {min_1, min_2, min_3, min_4};
 
+// dots for IP adres
+byte dot_left[7]  =   {84,  0,   0,  0, 0, 0, 0};
+byte dot_right[7] =   {103, 0,   0,  0, 0, 0, 0};
+byte* dots[2]     =   {dot_left, dot_right};
+
 // Numbers
 byte left_1[17] =  {44, 28, 20, 29, 42, 51, 64, 73, 86, 0, 0, 0, 0, 0, 0, 0, 0};
 byte right_1[17] = {38, 34, 14, 35, 36, 57, 58, 79, 80, 0, 0, 0, 0, 0, 0, 0, 0};
@@ -86,8 +91,8 @@ byte left_7[17] =  {89, 70, 67, 49, 43, 29, 20, 21, 22, 23, 24, 0, 0, 0, 0, 0, 0
 byte right_7[17] = {83, 76, 61, 55, 37, 35, 14, 15, 16, 17, 18, 0, 0, 0, 0, 0, 0};
 byte left_8[17] =  {21, 22, 23, 48, 49, 50, 87, 88, 89, 73, 64, 42, 29, 69, 68, 46, 25};
 byte right_8[17] = {15, 16, 17, 54, 55, 56, 81, 82, 83, 79, 58, 36, 35, 31, 40, 62, 75};
-byte left_9[17] =  {21, 22, 23, 48, 49, 50, 87, 88, 89, 73, 64, 42, 29, 69, 46, 25, 0};
-byte right_9[17] = {15, 16, 17, 54, 55, 56, 81, 82, 83, 79, 58, 36, 35, 31, 40, 75, 0};
+byte left_9[17] =  {21, 22, 23, 48, 49, 50, 87, 88, 89, 73, 64, 42, 29, 46, 25, 51, 0};
+byte right_9[17] = {15, 16, 17, 54, 55, 56, 81, 82, 83, 79, 58, 36, 35, 31, 40, 57, 0};
 byte left_0[17] =  {21, 22, 23, 87, 88, 89, 25, 46, 47, 68, 69, 73, 64, 51, 42, 29, 0};
 byte right_0[17] = {15, 16, 17, 31, 40, 53, 62, 75, 83, 82, 81, 79, 58, 57, 36, 35, 0};
 
@@ -105,9 +110,6 @@ byte minutes = 0;
 byte min_five = 0;
 byte single_min = 0;
 
-byte en_it_is;
-byte en_am_pm;
-byte en_oclock;
 byte en_single_min;
 boolean settings_changed = false;
 byte en_clock = 1;
@@ -140,9 +142,9 @@ double v_clock;
 bool httpChange;
 
 // EEPROM address assignment
-const int EEPROM_addr_it_is = 6;
-const int EEPROM_addr_oclock = 7;
-const int EEPROM_addr_am_pm = 8;
+//const int EEPROM_addr_it_is = 6;
+//const int EEPROM_addr_oclock = 7;
+//const int EEPROM_addr_am_pm = 8;
 const int EEPROM_addr_single_min = 9;
 const int EEPROM_addr_t_mo_night_start = 10;
 const int EEPROM_addr_t_mo_night_end = 11;
@@ -193,35 +195,29 @@ void setup() {
 
   EEPROM.begin(512); // There are 512 bytes of EEPROM, from 0 to 511
 
-  // Execute this code only once to initialize default values
-  //          EEPROM.write(EEPROM_addr_it_is, 1); // "Es ist", default: on
-  //          EEPROM.write(EEPROM_addr_am_pm, 0); // "am/pm", default: off
-  //          EEPROM.write(EEPROM_addr_oclock, 1); // "Uhr", default: on
-  //          EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
-  //          EEPROM.write(EEPROM_addr_t_mo_night_start, 1); // Starting hour of nighttime, default: 1 am
-  //          EEPROM.write(EEPROM_addr_t_mo_night_end, 7); // Ending hour of nighttime, default: 7 am
-  //          EEPROM.write(EEPROM_addr_t_tu_night_start, 1); // Starting hour of nighttime, default: 1 am
-  //          EEPROM.write(EEPROM_addr_t_tu_night_end, 7); // Ending hour of nighttime, default: 7 am
-  //          EEPROM.write(EEPROM_addr_t_we_night_start, 1); // Starting hour of nighttime, default: 1 am
-  //          EEPROM.write(EEPROM_addr_t_we_night_end, 7); // Ending hour of nighttime, default: 7 am
-  //          EEPROM.write(EEPROM_addr_t_th_night_start, 1); // Starting hour of nighttime, default: 1 am
-  //          EEPROM.write(EEPROM_addr_t_th_night_end, 7); // Ending hour of nighttime, default: 7 am
-  //          EEPROM.write(EEPROM_addr_t_fr_night_start, 1); // Starting hour of nighttime, default: 1 am
-  //          EEPROM.write(EEPROM_addr_t_fr_night_end, 7); // Ending hour of nighttime, default: 7 am
-  //          EEPROM.write(EEPROM_addr_t_sa_night_start, 1); // Starting hour of nighttime, default: 1 am
-  //          EEPROM.write(EEPROM_addr_t_sa_night_end, 7); // Ending hour of nighttime, default: 7 am
-  //          EEPROM.write(EEPROM_addr_t_su_night_start, 1); // Starting hour of nighttime, default: 1 am
-  //          EEPROM.write(EEPROM_addr_t_su_night_end, 7); // Ending hour of nighttime, default: 7 am
-  //          EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
-  //          EEPROM.write(EEPROM_addr_s_clock, 0); // Saturation LED clock, default: 0
-  //          EEPROM.write(EEPROM_addr_v_clock, 50); // Value LED clock, default: 0
-  //          EEPROM.write(EEPROM_SummerTime, 0); // ll SummerTime on/off, default 0
-  //          EEPROM.commit();
+  //   Execute this code only once to initialize default values
+  //            EEPROM.write(EEPROM_addr_single_min, 1); // Display singles minutes, default: on
+  //            EEPROM.write(EEPROM_addr_t_mo_night_start, 1); // Starting hour of nighttime, default: 1 am
+  //            EEPROM.write(EEPROM_addr_t_mo_night_end, 7); // Ending hour of nighttime, default: 7 am
+  //            EEPROM.write(EEPROM_addr_t_tu_night_start, 1); // Starting hour of nighttime, default: 1 am
+  //            EEPROM.write(EEPROM_addr_t_tu_night_end, 7); // Ending hour of nighttime, default: 7 am
+  //            EEPROM.write(EEPROM_addr_t_we_night_start, 1); // Starting hour of nighttime, default: 1 am
+  //            EEPROM.write(EEPROM_addr_t_we_night_end, 7); // Ending hour of nighttime, default: 7 am
+  //            EEPROM.write(EEPROM_addr_t_th_night_start, 1); // Starting hour of nighttime, default: 1 am
+  //            EEPROM.write(EEPROM_addr_t_th_night_end, 7); // Ending hour of nighttime, default: 7 am
+  //            EEPROM.write(EEPROM_addr_t_fr_night_start, 1); // Starting hour of nighttime, default: 1 am
+  //            EEPROM.write(EEPROM_addr_t_fr_night_end, 7); // Ending hour of nighttime, default: 7 am
+  //            EEPROM.write(EEPROM_addr_t_sa_night_start, 1); // Starting hour of nighttime, default: 1 am
+  //            EEPROM.write(EEPROM_addr_t_sa_night_end, 7); // Ending hour of nighttime, default: 7 am
+  //            EEPROM.write(EEPROM_addr_t_su_night_start, 1); // Starting hour of nighttime, default: 1 am
+  //            EEPROM.write(EEPROM_addr_t_su_night_end, 7); // Ending hour of nighttime, default: 7 am
+  //            EEPROM.write(EEPROM_addr_h_clock, 8); // Hue LED clock, default: 0
+  //            EEPROM.write(EEPROM_addr_s_clock, 0); // Saturation LED clock, default: 0
+  //            EEPROM.write(EEPROM_addr_v_clock, 50); // Value LED clock, default: 0
+  //            EEPROM.write(EEPROM_SummerTime, 0); // ll SummerTime on/off, default 0
+  //            EEPROM.commit();
 
   // Read settings from EEPROM
-  en_it_is = EEPROM.read(EEPROM_addr_it_is);
-  en_am_pm = EEPROM.read(EEPROM_addr_am_pm);
-  en_oclock = EEPROM.read(EEPROM_addr_oclock);
   en_single_min = EEPROM.read(EEPROM_addr_single_min);
   t_mo_night_start = EEPROM.read(EEPROM_addr_t_mo_night_start);
   t_mo_night_end = EEPROM.read(EEPROM_addr_t_mo_night_end);
@@ -302,7 +298,7 @@ void setup() {
   server.on("/reset", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Resetting word clock");
-    disableClockLED();
+    disableAllLED();
     ESP.reset();
   });
 
@@ -310,7 +306,7 @@ void setup() {
   server.on("/resetWifi", []() {
     server.send(200, "text/html", webPage);
     Serial.println("Resetting wifi module");
-    disableClockLED();
+    disableAllLED();
     WiFi.disconnect();
     delay(2000);
     ESP.reset();
@@ -339,9 +335,9 @@ void setup() {
   server.on("/hue_clock", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("value").toInt();
+    t_h_clock = double(state);
     state = map(state, 0, 360, 0, 100);
     h_clock = double(state) / 100;
-    t_h_clock = double(state);
     // Convert to RGB
     rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
     Serial.print("Clock LED hue is now: ");
@@ -372,7 +368,8 @@ void setup() {
   server.on("/clock_brightness", []() {
     server.send(200, "text/html", webPage);
     int state = server.arg("value").toInt();
-    v_clock = (double) state / 100;
+    // devide by 200, so we limit the leds to max 50% brightness to ensure long lifetime
+    v_clock = (double) state / 200; 
     t_v_clock = double(state);
     // Convert to RGB
     rgb_conv.hsvToRgb(h_clock, s_clock, v_clock, clock_rgb);
@@ -401,81 +398,6 @@ void setup() {
     Serial.print("Brightness: ");
     Serial.println(temp);
     EEPROM.commit();
-    delay(1000);
-  });
-
-  // Enable/Disable "o'clock"
-  server.on("/disp_oclock", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Display 'o'clock' enabled");
-      if (!en_oclock) {
-        EEPROM.write(EEPROM_addr_oclock, 1);
-        EEPROM.commit();
-        en_oclock = true;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Display 'o'clock' disabled");
-      if (en_oclock) {
-        EEPROM.write(EEPROM_addr_oclock, 0);
-        EEPROM.commit();
-        en_oclock = false;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  // Enable/Disable "It is"
-  server.on("/disp_it_is", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Display 'it is' enabled");
-      if (!en_it_is) {
-        EEPROM.write(EEPROM_addr_it_is, 1);
-        EEPROM.commit();
-        en_it_is = true;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Display 'it is' disabled");
-      if (en_it_is) {
-        EEPROM.write(EEPROM_addr_it_is, 0);
-        EEPROM.commit();
-        en_it_is = false;
-        settings_changed = true;
-      }
-    }
-    delay(1000);
-  });
-
-  // Enable/Disable "am/pm"
-  server.on("/disp_am_pm", []() {
-    server.send(200, "text/html", webPage);
-    int state = server.arg("state").toInt();
-    if (state == 1) {
-      Serial.println("Display 'am/pm' enabled");
-      if (!en_am_pm) {
-        EEPROM.write(EEPROM_addr_am_pm, 1);
-        EEPROM.commit();
-        en_am_pm = true;
-        settings_changed = true;
-      }
-    }
-    else {
-      Serial.println("Display 'am/pm' disabled");
-      if (en_am_pm) {
-        EEPROM.write(EEPROM_addr_am_pm, 0);
-        EEPROM.commit();
-        en_am_pm = false;
-        settings_changed = true;
-      }
-    }
     delay(1000);
   });
 
@@ -793,7 +715,9 @@ void loop() {
   }
   else {
     Serial.println("Time not set");
-    disableClockLED();
+    disableAllLED();
+    getNtpTime();
+    delay(10000);
   }
   //   }
   //  else
@@ -830,13 +754,12 @@ void clockDisplay() {
 
   // Dutch time
   // Display "het is"
-  if (en_it_is)
-    sendTime2LED(nl_het_is);
+  sendTime2LED(nl_het_is);
 
   switch (min_five) {
     case 0:
       sendTime2LED(hours_nl[hours]);
-      if (en_oclock) sendTime2LED(nl_uur);
+      sendTime2LED(nl_uur);
       break;
     case 5:
       sendTime2LED(nl_vijf_min);
@@ -913,10 +836,9 @@ void clockDisplay() {
 // Send data to LEDs
 ////////////////////////////////////////////////////
 void sendTime2LED(byte x[]) {
-
   for (byte i = 0; i <= 6; i++) {
     if (x[i] != 0)
-      pixels.setPixelColor(x[i] - 1, clock_rgb[0], clock_rgb[1], clock_rgb[2]);
+      pixels.setPixelColor(x[i] - 1, clock_rgb[1], clock_rgb[0], clock_rgb[2]);
   }
 }
 
@@ -926,7 +848,7 @@ void sendTime2LED(byte x[]) {
 void sendNum2LED(byte x[]) {
   for (byte i = 0; i <= 16; i++) {
     if (x[i] != 0)
-      pixels.setPixelColor(x[i] - 1, clock_rgb[0], clock_rgb[1], clock_rgb[2]);
+      pixels.setPixelColor(x[i] - 1, clock_rgb[1], clock_rgb[0], clock_rgb[2]);
   }
 }
 
@@ -1098,7 +1020,7 @@ time_t getNtpTime()
       if (size >= NTP_PACKET_SIZE) {
         Serial.println("Receive NTP Response");
         Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
-        unsigned long secsSince1900;
+        unsigned long long secsSince1900;
         // convert four bytes starting at location 40 to a long integer
         secsSince1900 =  (unsigned long)packetBuffer[40] << 24;
         secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
@@ -1231,21 +1153,23 @@ void ShowIp() {
     int y = (ip / 10U) % 10;
     int z = (ip / 1U) % 10;
     // when all are 0, or x & y are 0 -> only show last digit
-    if ((x == 0 && y==0 && z==0) || ( x == 0 & y == 0)) {
+    if ((x == 0 && y == 0 && z == 0) || ( x == 0 & y == 0)) {
       disableClockLED();
       sendNum2LED(numbers_left[z]);
+      sendTime2LED(dots[0]); // show dot on the left
       pixels.show(); // This sends the updated pixel color to the hardware.
       delay(FlDelay);
     }
-    // show 3 digits
+    // Show 2 digits, skip first one
     else if (x == 0) {
       disableClockLED();
       sendNum2LED(numbers_left[y]);
       sendNum2LED(numbers_right[z]);
+      sendTime2LED(dots[1]); // show dot on the right
       pixels.show(); // This sends the updated pixel color to the hardware.
       delay(FlDelay);
     }
-    // When there are only 2 digits, skip first one
+    // show 3 digits
     else {
       disableClockLED();
       sendNum2LED(numbers_left[x]);
@@ -1254,6 +1178,7 @@ void ShowIp() {
       delay(FlDelay);
       disableClockLED();
       sendNum2LED(numbers_left[z]);
+      sendTime2LED(dots[0]); // show dot on the left
       pixels.show(); // This sends the updated pixel color to the hardware.
       delay(FlDelay);
     }
@@ -1309,7 +1234,6 @@ void LoadHttp() {
     webPage += "<h1>Wordclock Web Server</h1>";
     webPage += "<ul><li>Unless stated otherwise, all settings are stored permanently.</li>";
     webPage += "<li>HSV format is used for LEDs colors. Check <a href='http://colorizer.org' target='_blank'>Colorizer</a> (HSV/HSB).</li>";
-    webPage += "<li>For brightness calibration, first adjust brightness manually and then select according lightning conditions. One has time for manual brightness adjustment until the clock updates the time, i.e. max. 60 s.</li></ul>";
 
     // General
     webPage += "<h2>General</h2>";
@@ -1329,9 +1253,6 @@ void LoadHttp() {
     webPage += "'><input type='submit' value='Submit'></form></form>";
     webPage += "<p>Save current color permanently: <a href=\"store_color_clock\"><button>Submit</button></a></p>";
 
-    webPage += "<form action='disp_oclock'>Display 'o'clock': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-    webPage += "<form action='disp_it_is'>Display 'It is': <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
-    webPage += "<form action='disp_am_pm'>Display am/pm (English only): <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
     webPage += "<form action='disp_single_min'>Corner LEDs for single minutes: <input type='radio' name='state' value='1'>On <input type='radio' name='state' value='0'>Off <input type='submit' value='Submit'></form>";
 
     // Nighttime
@@ -1409,8 +1330,9 @@ void LoadHttp() {
     webPage += "<p>LED test: <a href=\"LEDTest\"><button>Submit</button></a></p>";
     webPage += "Show current date (day): <a href=\"day_of_month\"><button>Submit</button></a>";
     webPage += "<p>Reset wifi, Warning password will be lost!: <a href=\"resetWifi\"><button>Submit</button></a></p>";
-    Serial.println("reloaded HTTP site");
-    Serial.println(settings_changed);
-    httpChange = false;
+  Serial.println("reloaded HTTP site");
+  Serial.println(settings_changed);
+  httpChange = false;
   }
+
 }
